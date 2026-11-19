@@ -83,5 +83,5 @@ Lights: 1 top light  2 desk lamp  3 off  4 chill
 E  pick up / drop Bob (right-drag to turn him), sit, lie in bed, desk lamp, door
 Hold H  hug Bob     H / K  hug / kiss another player (look at them)
 L  use a screen (TV, computer, laptop)   T  turn it on / off   P  play / pause
-V  first / third person     Esc  menu (change character)"
+V  first / third person     G  graphics high / low     Esc  menu (change character)"
 label_settings = SubResource("LabelSettings_help")

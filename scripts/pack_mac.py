@@ -1,11 +1,11 @@
-"""Build MyRoom_mac.zip straight from the source zips so macOS file permissions (executables) survive."""
+"""Build HappyNine_mac.zip straight from the source zips so macOS file permissions (executables) survive."""
 import os, zipfile
 
-ROOT = "MyRoom_mac/"
+ROOT = "HappyNine_mac/"
 GAME = r"C:/Users/thema/downloads/newgame/RoomGame"
 GODOT_ZIP = r"C:/Users/thema/Downloads/godot_mac/Godot_mac.zip"
 CEF_ZIP = r"C:/Users/thema/Downloads/gdcef_download/gdcef-0.21.0_godot-4.7.zip"
-OUT = r"C:/Users/thema/Downloads/MyRoom_mac.zip"
+OUT = r"C:/Users/thema/Downloads/HappyNine_mac.zip"
 
 PLAY = """#!/bin/bash
 cd "$(dirname "$0")"
@@ -18,16 +18,16 @@ README = """MY ROOM - Mac (needs an M1 / M2 / M3 / M4 Mac)
 1. Install Tailscale from the App Store (or https://tailscale.com/download) and sign in
    to the same Tailscale network as the other player.
 
-2. Double-click the zip to unzip it, and move the MyRoom_mac folder to your Desktop.
+2. Double-click the zip to unzip it, and move the HappyNine_mac folder to your Desktop.
 
 3. ONE TIME ONLY - let macOS run it (it isn't from the App Store):
    open Terminal (Cmd+Space, type Terminal, Enter), type
 
        xattr -cr
 
-   then a space, drag the MyRoom_mac folder into the Terminal window, and press Enter.
+   then a space, drag the HappyNine_mac folder into the Terminal window, and press Enter.
 
-4. Double-click "Play My Room.command".
+4. Double-click "Play Happy Nine.command".
    If macOS asks to allow incoming network connections, click Allow.
    If it still says it can't be opened: System Settings > Privacy & Security >
    scroll down > "Open Anyway", then try again.
@@ -85,6 +85,6 @@ with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
                 add_bytes(z, "game/" + rel, f.read(), 0o644)
             files += 1
     print("game files", files)
-    add_bytes(z, "Play My Room.command", PLAY.encode(), 0o755)
+    add_bytes(z, "Play Happy Nine.command", PLAY.encode(), 0o755)
     add_bytes(z, "READ ME FIRST.txt", README.replace("\n", "\n").encode(), 0o644)
 print("MB", os.path.getsize(OUT) // 1_000_000)

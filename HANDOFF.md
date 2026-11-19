@@ -1,4 +1,4 @@
-# Room Game – handoff notes
+# Happy Nine (Room Game) – handoff notes
 
 A first-person game of my real bedroom, built in Blender (Python script) and played in Godot 4.7.
 Start Claude Code in this folder (`C:\Users\thema\Downloads\newgame`) and read this file first.
@@ -199,3 +199,11 @@ Start Claude Code in this folder (`C:\Users\thema\Downloads\newgame`) and read t
 - **TV room couldn't be entered**: the black feature-wall panel ran across the doorway, and the keyboard + stool sat just inside it. Panel now starts after the doorway (FEAT_X0); keyboard moved along the west wall to Y 7.25..8.15, stool to (7.0, 7.7).
 - Pantry: the step stool blocked its doorway; moved to the corner.
 - Walk-tested doorways: hall -> TV room, kitchen -> scullery, scullery -> pantry, living -> sunroom, dining -> sunroom (all OK). Boot clean.
+
+## Session 14: bug list, wood textures, Miffy's face, hall mirror, rename to Happy Nine, performance
+- **Renamed the game "Happy Nine"** (project.godot config/name, lobby title, build scripts / launchers `Play Happy Nine.*`, build-game skill, pack_mac.py). project.godot keeps the old user data folder (`custom_user_dir_name = Godot/app_userdata/My Room`) so saved profiles / settings / browser cache survive. The `build/` output still has the old names until the game is rebuilt (build-game skill).
+- Ground floor (build_ground.py): generated **timber textures** (wood_image(): mixed spotted-gum planks with grain and staggered joints, 2 m repeat, packed PNG in the glb; darker deck boards in the sunroom); **window glass is solid** (you fell out through the front-door sidelight); Starry Night jigsaw (starry_night(), generated) framed over the entry console; blue picture + twin-tower 3D puzzle in the TV room; framed photo + house model on the hall shelves; vase of flowers on the dining table; pet bowls against the island's end; island tap moved behind the sink; scullery splashback no longer covers its window. Backups: `backup_before_flat/build_ground_before_texfix.py`.
+- Flat (build_flat.py): removed the blue rug under the dartboard; glass round the stair well now runs to the top end and turns to meet the flight's glass (the void beside the narrow flight was open); **lawn is a solid piece** (`Flat_Lawn`) as a safety net; **full-length hall mirror** outside the bedroom (`Flat_Hall_Mirror`, x 0.66..1.30 on the hall wall), made reflective by main.gd `_make_mirrors()` / `_add_mirror()` (mirror.gd). Backup: `build_flat_before_mirror.py`.
+- **Miffy (p3)**: convert_characters.py paints her eyes and X mouth black - they're separate little parts of the STL on the front of the head (found as loose parts, material "face"), done before decimating. Backup: `convert_characters_before_face.py`.
+- **Performance** (main.gd, end of file): the storey you're not on is hidden except what can be seen through the stair well (WELL_BOX), and its lights are off (they also leaked through floors); **graphics Low/High** - auto Low on integrated GPUs / <= 4 CPU cores, **G** toggles, saved in user://settings.cfg: Low = 75 % FSR render scale, no SSAO, no shadows, only lights within 9 m, half-resolution mirrors, 60 Hz physics. Help text mentions G. Backup: `main_before_perf.gd`.
+- Tested: boot clean; screenshots of each fix; walking into the sidelight stops at the glass; culling counts; both graphics modes switch without errors (fps here is vsync-capped at 60 either way).

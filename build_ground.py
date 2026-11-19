@@ -41,11 +41,153 @@ GROUND_Z = -2.76      # this floor's level (the flat's floor is 0)
 GROUND_Z = -2.76      # this floor's level (the flat's floor is 0)
 T = 0.10
 
+
+# ---------------------------------------------------------------------------
+# Generated textures (no photos): timber boards, the Starry Night puzzle, a blue picture
+# ---------------------------------------------------------------------------
+import numpy as np
+
+
+def _hex(h):
+    h = h.lstrip("#")
+    return np.array([int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4)])
+
+
+def make_image(name, rgb):
+    """rgb: (H, W, 3) array, row 0 = bottom. Packed into the .blend so it goes into the .glb as PNG."""
+    hgt, wid = rgb.shape[:2]
+    img = bpy.data.images.get(name) or bpy.data.images.new(name, wid, hgt, alpha=False)
+    if tuple(img.size) != (wid, hgt):
+        img.scale(wid, hgt)
+    px = np.ones((hgt, wid, 4), dtype=np.float32)
+    px[..., :3] = np.clip(rgb, 0, 1)
+    img.pixels.foreach_set(px.ravel())
+    img.file_format = "PNG"
+    img.pack()
+    return img
+
+
+def wood_image(name, palette, tile_m=2.0, px_per_m=512, board_w=0.125, min_len=0.5, max_len=1.8,
+               seed=1, gap_dark=0.55, grain=0.10):
+    """Timber boards running along U (= room X). Tiles seamlessly every tile_m metres."""
+    rng = np.random.default_rng(seed)
+    n = int(tile_m * px_per_m)
+    rows = int(round(tile_m / board_w))
+    bh = n // rows
+    out = np.zeros((n, n, 3), dtype=np.float32)
+    xs = np.arange(n)
+    pal = [_hex(p) for p in palette]
+    for r in range(rows):
+        y0 = r * bh
+        # planks along this row (lengths in px), starting at a random offset so joints stagger
+        off = rng.integers(0, n)
+        edges = [0]
+        while edges[-1] < n:
+            edges.append(edges[-1] + int(rng.uniform(min_len, max_len) * px_per_m))
+        edges[-1] = n
+        for a, b in zip(edges, edges[1:]):
+            base = pal[rng.integers(len(pal))] * rng.uniform(0.9, 1.08)
+            idx = (xs[a:b] + off) % n
+            ph = rng.uniform(0, 6.28)
+            yy = np.arange(bh)[:, None]
+            xx = idx[None, :].astype(np.float32)
+            # long wavy grain lines + fine streaks
+            g = (np.sin(yy * rng.uniform(0.35, 0.7) + np.sin(xx / rng.uniform(40, 90) + ph) * 3.0) * 0.5 + 0.5)
+            g2 = np.sin(xx / rng.uniform(3, 7) + yy * 0.9 + ph) * 0.5 + 0.5
+            shade = 1.0 - grain * g - 0.04 * g2
+            block = base[None, None, :] * shade[..., None]
+            out[y0:y0 + bh, idx] = block
+            out[y0:y0 + bh, idx[0]] *= gap_dark                 # end joint
+        out[y0, :] *= gap_dark                                  # gap between rows
+    return make_image(name, out)
+
+
+def textured(name, image, rough=0.5):
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes.get("Principled BSDF")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = rough
+    m.diffuse_color = (*image.pixels[:3], 1.0)
+    return m
+
+
+def uv_fit(obj, axis_u, axis_v, scale=None, flip_u=False):
+    """Re-map an object's UVs: scale = (su, sv) metres per texture repeat, or None to fit 0..1
+    over the object's bounds on (axis_u, axis_v) (0 = X, 1 = Y, 2 = Z)."""
+    me = obj.data
+    uv = me.uv_layers.active.data
+    co = [obj.matrix_world @ v.co for v in me.vertices]
+    lo = [min(c[i] for c in co) for i in range(3)]
+    hi = [max(c[i] for c in co) for i in range(3)]
+    for p in me.polygons:
+        for li in p.loop_indices:
+            c = co[me.loops[li].vertex_index]
+            if scale:
+                uv[li].uv = (c[axis_u] / scale[0], c[axis_v] / scale[1])
+            else:
+                uu = (c[axis_u] - lo[axis_u]) / max(1e-6, hi[axis_u] - lo[axis_u])
+                uv[li].uv = (1.0 - uu if flip_u else uu,
+                             (c[axis_v] - lo[axis_v]) / max(1e-6, hi[axis_v] - lo[axis_v]))
+
+
+def starry_night(w=768, h=512, seed=4):
+    """A painterly 'Starry Night' impression (Van Gogh, public domain) for the framed puzzle."""
+    rng = np.random.default_rng(seed)
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    u, v = x / w, y / h                                    # v = 0 at the bottom
+    sky = _hex("#14306e")[None, None, :] * (0.7 + 0.5 * v[..., None]) + _hex("#2c5bb0")[None, None, :] * 0.35
+    # swirling wind in the sky
+    sw = np.sin(u * 14 + np.sin(v * 9 + u * 4) * 2.2 + v * 6) * 0.5 + 0.5
+    sky += (_hex("#7fb0e6") - _hex("#1d3b8c"))[None, None, :] * (sw[..., None] ** 6) * 0.6 * (v[..., None] > 0.35)
+    img = sky
+    # brush texture
+    img *= (0.88 + 0.12 * (np.sin(x * 0.9 + np.sin(y * 0.21) * 4) * 0.5 + 0.5))[..., None]
+    # moon (top right) and stars with halos
+    for (cx, cy, r, glow) in [(0.86, 0.82, 0.07, 0.17)] + [(rng.uniform(0.05, 0.75), rng.uniform(0.55, 0.95),
+                                                             rng.uniform(0.012, 0.025), rng.uniform(0.04, 0.07)) for _ in range(10)]:
+        d = np.sqrt(((u - cx) * w / h) ** 2 + (v - cy) ** 2)
+        img += _hex("#f4d64e")[None, None, :] * np.clip(1 - (d - r) / glow, 0, 1)[..., None] ** 2 * 0.6
+        img = np.where((d < r)[..., None], _hex("#f6dc5a")[None, None, :], img)
+    # hills and village (bottom), with lit windows
+    hill = 0.30 + 0.05 * np.sin(u * 7 + 1) + 0.03 * np.sin(u * 17)
+    img = np.where((v < hill)[..., None], (_hex("#1d2e5a") * (0.7 + 0.6 * v[..., None] / 0.3)), img)
+    town = 0.18 + 0.03 * (np.floor(u * 22) % 3) * (u > 0.3)
+    img = np.where(((v < town) & (u > 0.3))[..., None], _hex("#24304a")[None, None, :], img)
+    for _ in range(25):
+        wx, wy = rng.uniform(0.32, 0.98), rng.uniform(0.05, 0.16)
+        m = (np.abs(u - wx) < 0.006) & (np.abs(v - wy) < 0.01)
+        img = np.where(m[..., None], _hex("#f2c23e")[None, None, :], img)
+    # the dark cypress (left), flame shaped
+    cyp = (np.abs(u - 0.16 - 0.03 * np.sin(v * 25)) < (0.09 * (1 - v / 0.95)) * (0.7 + 0.3 * np.sin(v * 40) ** 2)) & (v < 0.95)
+    img = np.where(cyp[..., None], _hex("#1a1f16")[None, None, :] * (0.8 + 0.4 * np.sin(v * 60)[..., None] ** 2), img)
+    # jigsaw lines (it's a puzzle)
+    grid = ((x % (w / 24)) < 1.0) | ((y % (h / 16)) < 1.0)
+    img = np.where(grid[..., None], img * 0.82, img)
+    return img
+
+
+def blue_picture(w=384, h=512, seed=9):
+    """The blue-green picture leaning in the TV room (sea and sky)."""
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    u, v = x / w, y / h
+    img = _hex("#2b8fd4")[None, None, :] * (0.6 + 0.6 * v[..., None])
+    img = np.where((v < 0.45)[..., None], _hex("#1e9f8a")[None, None, :] * (0.8 + 0.4 * np.sin(u * 30 + v * 12)[..., None] ** 2), img)
+    img = np.where(((v > 0.43) & (v < 0.47))[..., None], _hex("#e9f4f7")[None, None, :], img)
+    return img
+
+
 M.update({
     # (laid out / coloured from the scan and the user's reference photos, 2026-11-19)
     "wall":      material("Ground_Wall_Paint", "#d7dbdc", 0.9),         # pale grey walls downstairs
-    "g_wood":    material("Ground_Floor_Wood", "#a8703f", 0.45),        # honey spotted-gum boards
-    "g_deck":    material("Ground_Deck_Wood", "#6b3a26", 0.7),          # sunroom deck
+    # honey spotted-gum boards (mixed plank colours, grain, staggered joints - like the photos)
+    "g_wood":    textured("Ground_Floor_Wood", wood_image("Ground_Floor_Wood_Tex",
+                          ["#b98450", "#a56a3a", "#c99a62", "#8f5a33", "#b07443", "#9c6a44"], seed=3), 0.42),
+    "g_deck":    textured("Ground_Deck_Wood", wood_image("Ground_Deck_Wood_Tex",
+                          ["#6e3a25", "#7d4630", "#5f321f", "#744029"], board_w=0.14, seed=5, gap_dark=0.35), 0.7),
     "g_tile":    material("Ground_Floor_Tile_Grey", "#8d8a86", 0.4),   # bathroom
     "g_tile_w":  material("Ground_Floor_Tile_White", "#d9d7d2", 0.35),  # laundry
     "g_subway":  material("Ground_Subway_Tile", "#f1f1ee", 0.25),
@@ -124,13 +266,13 @@ fl.box(STUDY_E, HALL_S_E - T, -0.06, HALL_E + T, HALL_N + 0.05, 0, M["g_wood"]) 
 fl.box(LAUN_X0, HALL_N, -0.06, LAUN_X1, YN + T, 0, M["g_tile_w"])                   # laundry
 fl.box(LAUN_X1, HALL_N, -0.06, BATH_X1, YN + T, 0, M["g_tile"])                     # bathroom
 fl.box(BATH_X1, HALL_N, -0.06, XE + T, YN + T, 0, M["g_wood"])                      # TV room
-fl.finish()
+uv_fit(fl.finish(), 0, 1, scale=(2.0, 2.0))                                          # boards along X, 2 m per repeat
 dk_ = Piece("Ground_Sunroom_Deck", solid=True)                                       # deck boards
 x = XW
 while x < LIV_W - 0.01:
     dk_.box(x + 0.004, YS, -0.025, min(x + 0.135, LIV_W), SUN_N, 0.0, M["g_deck"])
     x += 0.14
-dk_.finish()
+uv_fit(dk_.finish(), 0, 1, scale=(2.0, 2.0))
 
 ce = Piece("Ground_Ceiling", solid=True)
 # one slab with the stair well left open (the flight comes down through it)
@@ -194,7 +336,9 @@ for k in range(1, 5):                                                           
     xx = FEAT_X0 + k * (XE - FEAT_X0) / 5
     wl.box(xx - 0.003, HALL_N + T + 0.03, 0, xx + 0.003, HALL_N + T + 0.034, H, M["black"])
 # scullery splashback: white subway tiles
-wl.box(KIT_E, YN - 0.012, 0.9, SCUL_X1, YN, 1.55, M["g_subway"])
+wl.box(KIT_E, YN - 0.012, 0.9, SCUL_X1, YN, 1.0, M["g_subway"])                            # (around the window)
+wl.box(KIT_E, YN - 0.012, 1.0, SCUL_WIN[0], YN, 1.55, M["g_subway"])
+wl.box(SCUL_WIN[1], YN - 0.012, 1.0, SCUL_X1, YN, 1.55, M["g_subway"])
 wl.box(SCUL_X1 - 0.012, SCUL_Y0, 0.9, SCUL_X1, YN, 1.55, M["g_subway"])
 wl.finish()
 
@@ -231,7 +375,7 @@ tr.finish()
 
 
 # ---------------------------------------------------------------- windows: glass, white plantation shutters
-gl = Piece("Ground_Window_Glass")
+gl = Piece("Ground_Window_Glass", solid=True)                                       # solid: you can't walk out
 sh = Piece("Ground_Shutters", bevel=0.002)
 
 
@@ -477,9 +621,9 @@ rugs = Piece("Ground_Rugs")
 rugs.rbox(-3.10, 1.07, 0, -1.10, 2.62, 0.012, M["g_rug_red"], r=0.006, seg=2)
 rugs.rbox(7.45, 4.10, 0, 8.25, 4.65, 0.015, M["g_rug_dk"], r=0.006, seg=2)          # front doormat
 rugs.rbox(6.10, 3.80, 0, 6.92, 4.30, 0.015, M["g_mat"], r=0.006, seg=2)             # mat at the garage door
-rugs.rbox(-5.15, 5.75, 0, -4.7, 6.15, 0.008, M["g_rug_gr"], r=0.004, seg=2)          # pet mat
-rugs.cyl(-5.05, 5.95, 0.008, 0.08, 0.06, M["porcelain"], seg=16)                      # pet bowls
-rugs.cyl(-4.82, 5.95, 0.008, 0.08, 0.06, M["porcelain"], seg=16)
+rugs.rbox(-4.98, 6.55, 0, -4.62, 7.25, 0.008, M["g_rug_gr"], r=0.004, seg=2)          # pet mat, against the island's end
+rugs.cyl(-4.8, 6.72, 0.008, 0.08, 0.06, M["porcelain"], seg=16)                       # pet bowls
+rugs.cyl(-4.8, 7.06, 0.008, 0.08, 0.06, M["porcelain"], seg=16)
 rugs.finish()
 ct = Piece("Ground_Coffee_Table", solid=True, bevel=0.006)
 ct.rbox(-2.70, 1.50, 0.36, -1.40, 2.08, 0.42, M["g_timber"], r=0.012)
@@ -592,8 +736,14 @@ for (x, y) in ((-6.73, 5.9), (-6.73, 6.55), (-6.73, 7.2)):
 pm.cyl(-6.95, 5.9, 0.776, 0.17, 0.02, M["wood_lt"], seg=24)                            # woven trivets
 pm.cyl(-6.55, 6.6, 0.776, 0.17, 0.02, M["wood_lt"], seg=24)
 pm.rbox(-6.95, 6.95, 0.776, -6.65, 7.15, 0.86, M["box_card"], r=0.01)                  # tissue box
-pm.cyl(-6.45, 7.3, 0.776, 0.03, 0.22, M["glass"], seg=12)                              # vase
-pm.sphere(-6.45, 7.3, 1.02, 0.06, M["pink"], seg=10)
+pm.cyl(-6.45, 7.3, 0.776, 0.045, 0.24, M["glass"], seg=14)                             # vase of flowers
+for k, (dx, dy, hz, col) in enumerate(((0.0, 0.0, 0.30, M["pink"]), (0.07, 0.03, 0.26, M["g_throw"]),
+                                       (-0.06, 0.04, 0.27, M["pink"]), (0.03, -0.07, 0.24, TOYS[3]),
+                                       (-0.04, -0.05, 0.29, M["pink"]))):
+    top = (-6.45 + dx, 7.3 + dy, 0.776 + 0.24 + hz)
+    pm.tube((-6.45, 7.3, 0.85), top, 0.005, M["g_plant"])
+    pm.sphere(*top, 0.045, col, scale=(1, 1, 0.8), seg=12)
+    pm.sphere(top[0] + 0.03, top[1], top[2] - 0.08, 0.03, M["g_plant"], scale=(1.6, 0.6, 0.3), seg=8)
 pm.finish()
 for i, (x, y, f, mat) in enumerate(((-7.6, 5.95, 0, M["g_timber"]), (-7.6, 6.85, 0, M["wood_lt"]),
                                     (-5.88, 5.95, 180, M["g_timber"]), (-5.88, 6.85, 180, M["g_timber"]),
@@ -648,8 +798,8 @@ kc.box(-2.82, YN - 0.3, 1.72, -2.38, YN - 0.02, H, M["g_stainless"])
 counter(kc, -4.60, 6.47, -1.47, 7.40, "+y", top=0.92)                                   # island (doors on the kitchen side)
 sink(kc, -2.75, 6.75, -1.95, 7.15, 0.92)                                                # its double sink
 kc.box(-2.36, 6.75, 0.74, -2.34, 7.15, 0.92, M["steel"])
-kc.tube((-2.35, 7.27, 0.92), (-2.35, 7.27, 1.22), 0.014, M["steel"])
-kc.tube((-2.35, 7.27, 1.22), (-2.35, 7.08, 1.16), 0.012, M["steel"])
+kc.tube((-2.35, 6.62, 0.92), (-2.35, 6.62, 1.22), 0.014, M["steel"])                 # tap behind the sink,
+kc.tube((-2.35, 6.62, 1.22), (-2.35, 6.82, 1.16), 0.012, M["steel"])                   # spout toward you
 # double-door fridge in the recess at the end, facing the kitchen (-X)
 kc.rbox(KIT_E + 0.02, 6.32, 0, 0.28, 7.38, 1.8, M["g_stainless"], r=0.015)
 kc.box(KIT_E + 0.015, 6.849, 0.05, KIT_E + 0.02, 6.851, 1.78, M["black"])
@@ -789,9 +939,11 @@ tvr.box(7.97, F + 0.061, 0.77, 9.88, F + 0.063, 1.84, M["g_tv2"])
 tvr.rbox(7.4, F + 0.05, 0, 7.75, F + 0.4, 0.42, M["black"], r=0.02)                      # subwoofer
 tvr.rbox(8.4, F + 0.2, 0.55, 9.4, F + 0.32, 0.62, M["black"], r=0.02)                     # sound bar
 tvr.cyl(10.25, 6.6, 0, 0.12, 1.55, M["plush"], seg=18)                                     # tall white lamp
-tvr.box(10.0, F + 0.02, 0, 10.45, F + 0.06, 0.95, M["g_plant"])                            # picture leaning
-for x in (10.05, 10.15):                                                                   # twin-tower model
-    tvr.cyl(x, F + 0.25, 0.55, 0.035, 0.45, M["steel"], r_top=0.008, seg=8)
+for x in (10.02, 10.16):                                                                   # twin-tower 3D puzzle
+    for k in range(5):
+        tvr.cyl(x, F + 0.25, 0.55 + k * 0.09, 0.034 - k * 0.004, 0.09, M["steel"], seg=8)
+    tvr.cyl(x, F + 0.25, 1.0, 0.004, 0.08, M["steel"], seg=6)
+tvr.box(10.0, F + 0.18, 0.78, 10.18, F + 0.32, 0.8, M["steel"])                          # the sky bridge
 tvr.finish()
 
 # ---------------------------------------------------------------- hall, entry and under the stairs
@@ -821,7 +973,14 @@ for z in (0.0, 0.42, 0.84, 1.26, 1.68, 2.1):
 for x in (5.58, 6.0):
     hd.box(x, HALL_S_E, 0, x + 0.02, HALL_S_E + 0.32, 2.13, M["white"])
 for z in (0.45, 0.87, 1.29, 1.71):
-    hd.rbox(5.65, HALL_S_E + 0.05, z, 5.85, HALL_S_E + 0.25, z + random.uniform(0.12, 0.3), random.choice(TOYS), r=0.02)
+    if z == 0.87:
+        hd.box(5.66, HALL_S_E + 0.06, z, 5.95, HALL_S_E + 0.09, z + 0.24, M["black"])          # framed picture
+        hd.box(5.68, HALL_S_E + 0.091, z + 0.02, 5.93, HALL_S_E + 0.093, z + 0.22, M["g_swirl"])
+    elif z == 1.29:
+        hd.box(5.68, HALL_S_E + 0.08, z, 5.88, HALL_S_E + 0.24, z + 0.09, M["g_throw"])        # little house model
+        hd.box(5.68, HALL_S_E + 0.08, z + 0.09, 5.88, HALL_S_E + 0.24, z + 0.13, M["navy"])
+    else:
+        hd.rbox(5.65, HALL_S_E + 0.05, z, 5.85, HALL_S_E + 0.25, z + random.uniform(0.12, 0.3), random.choice(TOYS), r=0.02)
 # under the stairs: black shoe rack, coat stand, shoe boxes (all under the flight's underside)
 for k in range(5):
     z = 0.12 + k * 0.2
@@ -836,6 +995,18 @@ for (x, y) in ((3.95, STAIR_Y0 + 0.05), (5.15, STAIR_Y0 + 0.05), (3.95, STAIR_Y0
 for (x0, z0) in ((3.4, 0.0), (3.4, 0.17), (3.6, 0.0)):
     hd.rbox(x0, STAIR_Y0 + 0.1, z0, x0 + 0.33, STAIR_Y0 + 0.32, z0 + 0.16, M["box_card"], r=0.005)
 hd.finish()
+
+# the framed Starry Night jigsaw over the entry console, and the blue picture leaning in the TV room
+ART = [("Ground_Art_Starry", starry_night(), (7.55, HALL_S_E, 1.22, 8.75, HALL_S_E + 0.025, 2.02)),
+       ("Ground_Art_Blue", blue_picture(), (9.98, HALL_N + T + 0.06, 0.02, 10.48, HALL_N + T + 0.09, 0.70))]
+for (nm, pic, (x0, y0, z0, x1, y1, z1)) in ART:
+    fr = Piece(nm + "_Frame")
+    fr.box(x0, y0, z0, x1, y1, z1, M["black"])
+    fr.finish()
+    cv = Piece(nm)
+    cv.box(x0 + 0.03, y1, z0 + 0.03, x1 - 0.03, y1 + 0.003, z1 - 0.03,
+           textured(nm + "_Mat", make_image(nm + "_Tex", pic), 0.6))
+    uv_fit(cv.finish(), 0, 2, flip_u=True)          # seen from +Y, so X runs right-to-left
 cs = Piece("Ground_Coat_Stand")
 cs.cyl(5.35, 4.45, 0, 0.2, 0.02, M["wood_lt"], seg=24)
 cs.cyl(5.35, 4.45, 0.02, 0.02, 1.7, M["wood_lt"], seg=10)

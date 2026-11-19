@@ -717,8 +717,11 @@ def glass_run(x0, y0, z0, x1, y1, z1, h=0.95):
 NEWEL_TOP = 5.0
 glass_run(STAIR_X1 - 0.05, FLIGHT_Y1 + 0.02, 0.0, RUN_X0 + 0.05, FLIGHT_Y1 + 0.02, STAIR_BOTTOM)
 glass_run(STAIR_X0 - 0.05, STAIR_Y0, 0.0, STAIR_X0 - 0.05, STAIR_Y1 + 0.05, 0.0)
-glass_run(STAIR_X0 - 0.05, STAIR_Y1 + 0.05, 0.0, NEWEL_TOP, STAIR_Y1 + 0.05, 0.0)
-for (x, y) in ((STAIR_X0 - 0.05, STAIR_Y1 + 0.05), (NEWEL_TOP, STAIR_Y1 + 0.05)):
+# the hall side runs right to the top end, then turns to meet the flight's own glass, so the
+# open void beside the top of the narrow flight is closed off
+glass_run(STAIR_X0 - 0.05, STAIR_Y1 + 0.05, 0.0, STAIR_X1, STAIR_Y1 + 0.05, 0.0)
+glass_run(STAIR_X1, STAIR_Y1 + 0.05, 0.0, STAIR_X1, FLIGHT_Y1 + 0.02, 0.0)
+for (x, y) in ((STAIR_X0 - 0.05, STAIR_Y1 + 0.05), (STAIR_X1, STAIR_Y1 + 0.05), (STAIR_X1, FLIGHT_Y1 + 0.02)):
     rail.cyl(x, y, 0, 0.03, 0.98, M["steel"], seg=12)                          # end posts
 rail.finish()
 hr = Piece("Flat_Stair_Handrail")                                             # on the south wall
@@ -766,8 +769,10 @@ for (y0, y1, x) in ((mid_y, SLIDE_Y1, LIV_X1 + 0.07), (mid_y + 0.05, SLIDE_Y1, L
 sd.finish()
 
 # outside: the lawn at ground-floor level (this flat is upstairs), trees, neighbours' houses, sky all round
+lawn = Piece("Flat_Lawn", solid=True)                                          # solid: nobody falls forever
+lawn.box(-20, -20, GROUND_Z - 0.3, 30, 30, GROUND_Z - 0.04, M["grass"])   # just under the ground floor
+lawn.finish()
 out = Piece("Flat_Outside")
-out.box(-20, -20, GROUND_Z - 0.3, 30, 30, GROUND_Z - 0.04, M["grass"])   # just under the ground floor
 for (x, y, s) in ((14.5, 2.0, 1.2), (16.0, 6.5, 1.5), (15.0, 11.0, 1.1), (8.0, 12.5, 1.3),
                   (3.0, 12.0, 1.0), (9.5, -0.5, 1.2), (5.5, -1.5, 1.0), (13.0, 14.0, 1.4)):
     out.cyl(x, y, -3.0, 0.18 * s, 3.2 * s, M["trunk"], seg=10, r_top=0.12 * s)
@@ -823,6 +828,13 @@ for (x, y, side) in ((-0.68, COR_N, -1), (2.35, HALL_N, -1), (3.9, HALL_N, -1), 
         hd.rbox(x - 0.04, y - 0.012, 1.15, x + 0.04, y, 1.27, M["white"], r=0.004, seg=2)
 hd.rbox(-1.2, COR_N - 0.02, 1.45, -1.08, COR_N, 1.55, M["white"], r=0.006, seg=2)   # thermostat
 hd.finish()
+
+# full-length mirror on the hall wall just outside the bedroom door (main.gd makes it reflect)
+M.setdefault("hall_mirror", material("Flat_Hall_Mirror", "#c4d0d8", 0.05))
+hm = Piece("Flat_Hall_Mirror", bevel=0.003)
+hm.rbox(0.66, HALL_S, 0.10, 1.30, HALL_S + 0.03, 1.98, M["wood_dark"], r=0.008, seg=2)          # frame
+hm.box(0.70, HALL_S + 0.03, 0.14, 1.26, HALL_S + 0.033, 1.94, M["hall_mirror"])
+hm.finish()
 
 # ---------------------------------------------------------------- toilet
 tl = Piece("Flat_Toilet", solid=True)
@@ -1075,7 +1087,6 @@ sc.finish()
 rg = Piece("Flat_Rugs")
 rg.rbox(9.3, 4.05, 0, 10.3, 5.0, 0.012, M["cowhide"], r=0.006, seg=2)
 rg.sphere(9.8, 4.5, 0.008, 0.35, M["plush"], scale=(1.0, 0.7, 0.01), seg=16)
-rg.rbox(7.4, 4.95, 0, 8.0, 5.5, 0.012, M["rug_blue"], r=0.006, seg=2)
 rg.finish()
 cu = Piece("Flat_Curtains")
 for (y0, y1) in ((SLIDE_Y0 - 0.38, SLIDE_Y0 + 0.06), (SLIDE_Y1 - 0.06, SLIDE_Y1 + 0.38)):

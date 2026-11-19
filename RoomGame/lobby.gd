@@ -53,7 +53,7 @@ func show_pause() -> void:
 
 func _set_paused(on: bool) -> void:
 	paused = on
-	_title.text = "Paused" if on else "My Room"
+	_title.text = "Paused" if on else "Happy Nine"
 	_start_box.visible = not on
 	_pause_box.visible = on
 
@@ -171,7 +171,7 @@ func _build() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	panel.add_child(col)
-	_title = _label("My Room", 34)
+	_title = _label("Happy Nine", 34)
 	_title.add_theme_color_override("font_color", Color.WHITE)
 	col.add_child(_title)
 

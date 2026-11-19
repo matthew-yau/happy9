@@ -105,13 +105,10 @@ if not ONLY or "p3" in ONLY:
   o.name = "P3"
   bpy.context.view_layer.objects.active = o
   o.select_set(True)
-  mod = o.modifiers.new("dec", 'DECIMATE')
-  mod.ratio = 0.2
-  bpy.ops.object.modifier_apply(modifier="dec")
   mn, mx = mesh_bounds([o])
   o.matrix_world = fit(mn, mx)
   bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-  for n, col in [("white", (0.96, 0.95, 0.92, 1)), ("dress", (0.95, 0.5, 0.15, 1))]:
+  for n, col in [("white", (0.96, 0.95, 0.92, 1)), ("dress", (0.95, 0.5, 0.15, 1)), ("face", (0.02, 0.02, 0.02, 1))]:
       m = bpy.data.materials.new(n)
       m.diffuse_color = col
       bsdf = m.node_tree.nodes.get("Principled BSDF")
@@ -119,10 +116,45 @@ if not ONLY or "p3" in ONLY:
           bsdf.inputs["Base Color"].default_value = col
           bsdf.inputs["Roughness"].default_value = 0.8
       o.data.materials.append(m)
+  # Her eyes and the two strokes of her X mouth are separate little parts on the front of the
+  # head (the bumps on her face): paint those black ("face"), before simplifying the mesh.
+  bm = bmesh.new()
+  bm.from_mesh(o.data)
+  bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+  bm.faces.ensure_lookup_table()
+  from collections import deque
+  seen, n_face = set(), 0
+  for f0 in bm.faces:
+      if f0.index in seen:
+          continue
+      q, comp = deque([f0]), []
+      seen.add(f0.index)
+      while q:
+          a_ = q.popleft(); comp.append(a_)
+          for e in a_.edges:
+              for b_ in e.link_faces:
+                  if b_.index not in seen:
+                      seen.add(b_.index); q.append(b_)
+      vs = [v.co for f in comp for v in f.verts]
+      cz = (min(v.z for v in vs) + max(v.z for v in vs)) / 2
+      cy = (min(v.y for v in vs) + max(v.y for v in vs)) / 2
+      size = max(max(v[i] for v in vs) - min(v[i] for v in vs) for i in range(3))
+      if 0.49 * H < cz < 0.65 * H and cy > 0.08 and size < 0.1:
+          for f in comp:
+              f.material_index = 2
+          n_face += 1
+  print("P3 face parts (eyes + mouth):", n_face)
+  bm.to_mesh(o.data)
+  bm.free()
+  mod = o.modifiers.new("dec", 'DECIMATE')
+  mod.ratio = 0.2
+  bpy.ops.object.modifier_apply(modifier="dec")
   bm = bmesh.new()
   bm.from_mesh(o.data)
   k = H / 1.75   # dress limits were tuned at 1.75 m
   for f in bm.faces:
+      if f.material_index == 2:
+          continue
       c = f.calc_center_median()
       f.material_index = 1 if (0.16 * k < c.z < 0.78 * k and abs(c.x) < 0.33 * k) else 0
   bm.to_mesh(o.data)

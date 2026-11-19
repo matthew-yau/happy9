@@ -1,4 +1,4 @@
-# Build the playable My Room game on Windows from this repo.
+# Build the playable Happy Nine game on Windows from this repo.
 # Usage (from the repo root):  powershell -ExecutionPolicy Bypass -File scripts/build_game.ps1 [-Zip]
 param([switch]$Zip)
 $ErrorActionPreference = "Stop"
@@ -11,7 +11,7 @@ $GodotZip = "Godot_v${GodotVer}_win64.exe.zip"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Dl = Join-Path $Root "build\downloads"
-$Out = Join-Path $Root "build\MyRoom-windows"
+$Out = Join-Path $Root "build\HappyNine-windows"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Test-Zip($path) {
@@ -44,8 +44,8 @@ New-Item -ItemType Directory -Force $game | Out-Null
 # Godot: the zip holds Godot_v..._win64.exe and Godot_v..._win64_console.exe
 $z = [IO.Compression.ZipFile]::OpenRead($godot)
 foreach ($e in $z.Entries) {
-    if ($e.Name -like "*_console.exe") { [IO.Compression.ZipFileExtensions]::ExtractToFile($e, (Join-Path $Out "MyRoom_console.exe"), $true) }
-    elseif ($e.Name -like "*.exe") { [IO.Compression.ZipFileExtensions]::ExtractToFile($e, (Join-Path $Out "MyRoom.exe"), $true) }
+    if ($e.Name -like "*_console.exe") { [IO.Compression.ZipFileExtensions]::ExtractToFile($e, (Join-Path $Out "HappyNine_console.exe"), $true) }
+    elseif ($e.Name -like "*.exe") { [IO.Compression.ZipFileExtensions]::ExtractToFile($e, (Join-Path $Out "HappyNine.exe"), $true) }
 }
 $z.Dispose()
 
@@ -74,17 +74,17 @@ if ($n -eq 0) { throw "no Windows files found in $GdcefZip" }
 Write-Host "importing the project (first run, takes a minute) ..."
 $log = Join-Path $Root "build\import_windows.log"
 $ErrorActionPreference = "Continue"           # Godot writes harmless warnings to stderr
-& (Join-Path $Out "MyRoom_console.exe") --headless --path $game --import *> $log
+& (Join-Path $Out "HappyNine_console.exe") --headless --path $game --import *> $log
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path (Join-Path $game ".godot\imported"))) {
     Get-Content $log -Tail 20
     throw "import failed - see build\import_windows.log"
 }
 
-Set-Content -Path (Join-Path $Out "Play My Room.bat") -Encoding ascii -Value "@echo off`r`ncd /d `"%~dp0`"`r`nstart `"`" `"MyRoom.exe`" --path game`r`n"
+Set-Content -Path (Join-Path $Out "Play Happy Nine.bat") -Encoding ascii -Value "@echo off`r`ncd /d `"%~dp0`"`r`nstart `"`" `"HappyNine.exe`" --path game`r`n"
 Set-Content -Path (Join-Path $Out "READ ME.txt") -Encoding ascii -Value @"
 MY ROOM
-Double-click "Play My Room.bat". If Windows Firewall asks, tick Private AND Public and click Allow.
+Double-click "Play Happy Nine.bat". If Windows Firewall asks, tick Private AND Public and click Allow.
 If SmartScreen says "Windows protected your PC": More info > Run anyway.
 Play together: both of you install Tailscale (tailscale.com/download) and sign in to the same
 network. One clicks "Host a game" (shows a 100.x.x.x address); the other types it under "Join a friend".
@@ -92,7 +92,7 @@ network. One clicks "Host a game" (shows a 100.x.x.x address); the other types i
 
 if ($Zip) {
     Write-Host "zipping ..."
-    $zipPath = Join-Path $Root "build\MyRoom-windows.zip"
+    $zipPath = Join-Path $Root "build\HappyNine-windows.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     [IO.Compression.ZipFile]::CreateFromDirectory($Out, $zipPath, [IO.Compression.CompressionLevel]::Optimal, $true)
     Write-Host "zip: $zipPath"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the playable My Room game on macOS (Apple Silicon) from this repo.
+# Build the playable Happy Nine game on macOS (Apple Silicon) from this repo.
 # Usage (from the repo root):  bash scripts/build_game.sh [--zip]
 set -euo pipefail
 
@@ -10,7 +10,7 @@ GODOT_ZIP="Godot_v${GODOT_VER}_macos.universal.zip"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DL="$ROOT/build/downloads"
-OUT="$ROOT/build/MyRoom-mac"
+OUT="$ROOT/build/HappyNine-mac"
 MAKE_ZIP=0
 [ "${1:-}" = "--zip" ] && MAKE_ZIP=1
 
@@ -47,15 +47,15 @@ if [ ! -d "$OUT/game/.godot/imported" ]; then
     echo "import failed - see build/import_mac.log"; tail -20 "$ROOT/build/import_mac.log"; exit 1
 fi
 
-cat > "$OUT/Play My Room.command" <<'EOF'
+cat > "$OUT/Play Happy Nine.command" <<'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 ./Godot.app/Contents/MacOS/Godot --path game
 EOF
-chmod +x "$OUT/Play My Room.command"
+chmod +x "$OUT/Play Happy Nine.command"
 cat > "$OUT/READ ME.txt" <<'EOF'
 MY ROOM
-Double-click "Play My Room.command". If macOS asks about incoming network connections, click Allow.
+Double-click "Play Happy Nine.command". If macOS asks about incoming network connections, click Allow.
 Play together: both of you install Tailscale (tailscale.com/download) and sign in to the same
 network. One clicks "Host a game" (shows a 100.x.x.x address); the other types it under "Join a friend".
 If you got this folder as a zip from someone, first run once in Terminal:  xattr -cr <drag this folder here>
@@ -63,8 +63,8 @@ EOF
 
 if [ $MAKE_ZIP = 1 ]; then
     echo "zipping ..."
-    rm -f "$ROOT/build/MyRoom-mac.zip"
-    ditto -c -k --keepParent "$OUT" "$ROOT/build/MyRoom-mac.zip"
-    echo "zip: $ROOT/build/MyRoom-mac.zip"
+    rm -f "$ROOT/build/HappyNine-mac.zip"
+    ditto -c -k --keepParent "$OUT" "$ROOT/build/HappyNine-mac.zip"
+    echo "zip: $ROOT/build/HappyNine-mac.zip"
 fi
 echo "BUILD OK: $OUT"

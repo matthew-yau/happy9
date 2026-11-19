@@ -141,6 +141,7 @@ func _ready() -> void:
 	laptop.closed.connect(func(): player.input_locked = false)
 	_make_devices()
 	_make_mirrors()
+	_init_quality()
 	laptop.page_touched.connect(_on_device_touched)
 	set_mode(1, true)
 
@@ -456,6 +457,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.physical_keycode == KEY_V:
 		player.toggle_third_person()          # works any time, even mid-hug
 		return
+	if event.physical_keycode == KEY_G:
+		set_quality(not low_quality)
+		_toast("Graphics: " + ("Low (faster)" if low_quality else "High"), 2.0)
+		return
 	if interaction != 0:
 		return                                # busy hugging / kissing someone
 	match event.physical_keycode:
@@ -593,6 +598,7 @@ func _update_door(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	_update_culling(delta)
 	_update_door(delta)
 	_update_my_avatar()
 	_update_interaction()
@@ -692,16 +698,29 @@ var _screen_off_mat: StandardMaterial3D
 
 ## Finds each device's screen in the room / flat and puts a "picture" quad on it
 ## Bathroom mirror (material Flat_Bath_Mirror on the east wall, facing -X = into the room)
+## + the full-length hall mirror outside the bedroom (Flat_Hall_Mirror on the hall wall, facing
+## Blender +Y = Godot -Z)
+var mirrors: Array = []
+
+
 func _make_mirrors() -> void:
 	var box := _find_surface_box("Flat_Bath_Mirror", false)
-	if box.size == Vector3.ZERO:
-		return
+	if box.size != Vector3.ZERO:
+		var front := Vector3(box.position.x, box.get_center().y, box.get_center().z)   # the room-side face
+		_add_mirror("BathMirror", front, Vector3.LEFT, box.size.z, box.size.y)
+	box = _find_surface_box("Flat_Hall_Mirror", false)
+	if box.size != Vector3.ZERO:
+		var front := Vector3(box.get_center().x, box.get_center().y, box.position.z)
+		_add_mirror("HallMirror", front, Vector3.FORWARD, box.size.x, box.size.y)
+
+
+func _add_mirror(nm: String, front: Vector3, normal: Vector3, w: float, h: float) -> void:
 	var m := Node3D.new()
-	m.name = "BathMirror"
+	m.name = nm
 	m.set_script(load("res://mirror.gd"))
 	add_child(m)
-	var front := Vector3(box.position.x, box.get_center().y, box.get_center().z)   # the room-side face
-	m.setup(front, Vector3.LEFT, box.size.z, box.size.y)
+	m.setup(front, normal, w, h)
+	mirrors.append(m)
 
 
 func _make_devices() -> void:
@@ -1464,3 +1483,101 @@ func _add_fallback_floor() -> void:
 	mesh.mesh = plane
 	floor_body.add_child(mesh)
 	add_child(floor_body)
+
+
+# ---------------------------------------------------------------- performance
+# Only the storey you're on is drawn (both near the stairs), and only its lights are on - lights
+# without shadows would also shine through the floors. "Low" graphics (auto on integrated GPUs,
+# G to switch, remembered) renders at 75 %, drops ambient occlusion and shadows, keeps only
+# lights near you, makes mirrors smaller and runs physics at 60 Hz.
+const SETTINGS_PATH := "user://settings.cfg"
+const LIGHT_RANGE_LOW := 9.0
+var low_quality := false
+var _cull_timer := 0.0
+var _upstairs_nodes: Array[Node3D] = []      # bedroom + the flat's rooms (not its garden / sky)
+var _ground_nodes: Array[Node3D] = []
+var _light_floor := {}                       # OmniLight3D -> true if it's downstairs
+var _well_view := {}                         # node -> true if it can be seen through the stair well
+# the stair well (and a margin) in Godot coordinates: Blender X 1.0..7.0, Y 2.8..6.6
+const WELL_BOX := AABB(Vector3(1.0, -3.2, -6.6), Vector3(6.0, 6.4, 3.8))
+
+
+func _init_quality() -> void:
+	for root_name in ["Room", "Flat"]:
+		var r := get_node_or_null(root_name) as Node3D
+		if r == null:
+			continue
+		for c in r.get_children():
+			var nm := String(c.name)
+			if c is Node3D and not (nm.begins_with("Flat_Outside") or nm.begins_with("Flat_Lawn")
+					or nm.begins_with("Flat_Sky") or nm.begins_with("Flat_Stair") or nm.begins_with("Flat_Balustrade")):
+				_upstairs_nodes.append(c)
+	var g := get_node_or_null("Ground") as Node3D
+	if g:
+		for c in g.get_children():
+			if c is Node3D:
+				_ground_nodes.append(c)
+	for l in flat_lights:
+		_light_floor[l] = l.global_position.y < -1.0
+	for n in _upstairs_nodes + _ground_nodes:
+		var mi := n as MeshInstance3D
+		_well_view[n] = mi == null or (mi.global_transform * mi.get_aabb()).intersects(WELL_BOX)
+	var cfg := ConfigFile.new()
+	var low := _weak_hardware()
+	if cfg.load(SETTINGS_PATH) == OK:
+		low = cfg.get_value("graphics", "low", low)
+	set_quality(low, false)
+
+
+func _weak_hardware() -> bool:
+	var kind := RenderingServer.get_video_adapter_type()
+	if kind == RenderingDevice.DEVICE_TYPE_INTEGRATED_GPU or kind == RenderingDevice.DEVICE_TYPE_CPU:
+		return true
+	return OS.get_processor_count() <= 4
+
+
+func set_quality(low: bool, save := true) -> void:
+	low_quality = low
+	var vp := get_viewport()
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if low else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = 0.75 if low else 1.0
+	env.ssao_enabled = not low
+	for l in [desk_spot, shelf_light]:
+		if l:
+			l.shadow_enabled = not low
+	Engine.physics_ticks_per_second = 60 if low else 120
+	for m in mirrors:
+		if m.viewport:
+			var px := 280.0 if low else 560.0
+			m.viewport.size = Vector2i(int(m.width * px), int(m.height * px))
+			m.viewport.msaa_3d = Viewport.MSAA_DISABLED if low else Viewport.MSAA_2X
+	_cull_timer = 0.0
+	if save:
+		var cfg := ConfigFile.new()
+		cfg.load(SETTINGS_PATH)
+		cfg.set_value("graphics", "low", low)
+		cfg.save(SETTINGS_PATH)
+
+
+func _update_culling(delta: float) -> void:
+	_cull_timer -= delta
+	if _cull_timer > 0.0 or player == null:
+		return
+	_cull_timer = 0.25
+	var p := player.global_position
+	var bx := p.x
+	var by := -p.z                                 # Blender Y
+	var downstairs := p.y < -1.3
+	# near the stair well you can see both storeys
+	var near_well := bx > 0.5 and bx < 7.5 and by > 2.8 and by < 6.6
+	var show_up := not downstairs or near_well
+	var show_down := downstairs or near_well
+	for n in _upstairs_nodes:
+		n.visible = show_up or _well_view[n]       # what's around the well stays: you can look through it
+	for n in _ground_nodes:
+		n.visible = show_down or _well_view[n]
+	for l: OmniLight3D in _light_floor:
+		var on: bool = show_down if _light_floor[l] else show_up
+		if on and low_quality:
+			on = l.global_position.distance_to(p) < LIGHT_RANGE_LOW
+		l.visible = on
