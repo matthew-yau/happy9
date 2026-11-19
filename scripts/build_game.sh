@@ -72,6 +72,7 @@ cat > "$OUT/Play Happy Nine.command" <<'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 ./Godot.app/Contents/MacOS/Godot --path game
+osascript -e 'tell application "Terminal" to close front window' > /dev/null 2>&1 || true
 EOF
 chmod +x "$OUT/Play Happy Nine.command"
 cat > "$OUT/READ ME.txt" <<'EOF'
