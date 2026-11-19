@@ -1,0 +1,17 @@
+# Godot cache (rebuilt on import)
+RoomGame/.godot/
+# gdCEF Chromium binaries (too big for GitHub; download gdCEF 0.21.0 for Godot 4.7 and copy
+# cef_artifacts/windows + macos into RoomGame/cef_artifacts/)
+RoomGame/cef_artifacts/windows/
+RoomGame/cef_artifacts/macos/
+RoomGame/cef_artifacts/linux/
+# raw 3D scans of the real home + scan working files (private)
+*.fbx
+scans/
+# old versions
+backup_before_flat/
+backup_before_multiplayer/
+# local Claude settings
+.claude/settings.local.json
+*.log
+~*.TMP
