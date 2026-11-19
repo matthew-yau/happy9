@@ -209,6 +209,8 @@ func _build() -> void:
 		_save(); resume_game.emit()))
 	_pause_box.add_child(_big_button("Back to start menu", Color(0.45, 0.25, 0.28), func():
 		_save(); leave_game.emit()))
+	_pause_box.add_child(_big_button("Quit game", Color(0.25, 0.25, 0.28), func():
+		_save(); get_tree().quit()))
 	col.add_child(_pause_box)
 	_start_box = VBoxContainer.new()
 	_start_box.add_theme_constant_override("separation", 10)
@@ -216,6 +218,8 @@ func _build() -> void:
 	col = _start_box
 	col.add_child(_big_button("Play alone", Color(0.3, 0.32, 0.4), func():
 		_save(); play_solo.emit()))
+	col.add_child(_big_button("Quit", Color(0.25, 0.25, 0.28), func():
+		_save(); get_tree().quit()))
 	col.add_child(_big_button("Host a game", Color(0.2, 0.55, 0.35), func():
 		_save(); host_game.emit()))
 

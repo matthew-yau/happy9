@@ -778,11 +778,11 @@ aq.rbox(-5.52, YN - 0.6, 0, -4.70, YN - 0.02, 2.4, M["g_cab"], r=0.01)          
 aq.box(-5.111, YN - 0.605, 0.05, -5.109, YN - 0.6, 2.35, M["vent"])
 aq.finish()
 pl = Piece("Ground_Plant")                                                            # lucky bamboo by the kitchen
-pl.cyl(-4.85, 7.75, 0.92, 0.07, 0.3, M["glass"], seg=14)
+pl.cyl(-4.85, 7.75, 0, 0.07, 0.3, M["glass"], seg=14)                               # was 0.92: no surface there
 for k in range(5):
     a = k * 1.3
-    pl.tube((-4.85, 7.75, 1.0), (-4.85 + 0.3 * math.cos(a), 7.75 + 0.3 * math.sin(a), 1.7 + 0.1 * k), 0.012, M["g_plant"])
-    pl.sphere(-4.85 + 0.3 * math.cos(a), 7.75 + 0.3 * math.sin(a), 1.7 + 0.1 * k, 0.09, M["g_plant"], scale=(1.6, 0.5, 0.3), seg=8)
+    pl.tube((-4.85, 7.75, 0.08), (-4.85 + 0.3 * math.cos(a), 7.75 + 0.3 * math.sin(a), 0.78 + 0.1 * k), 0.012, M["g_plant"])
+    pl.sphere(-4.85 + 0.3 * math.cos(a), 7.75 + 0.3 * math.sin(a), 0.78 + 0.1 * k, 0.09, M["g_plant"], scale=(1.6, 0.5, 0.3), seg=8)
 pl.finish()
 
 # ---------------------------------------------------------------- kitchen: galley along the north wall + island

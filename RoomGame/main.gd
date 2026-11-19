@@ -128,6 +128,10 @@ func _ready() -> void:
 			_hide_blender_cameras(ground)
 			_prepare_flat(ground)          # same treatment: per-vertex colours, both sides drawn
 			_make_flat_lights(ground)      # its "Ground_Light_N" markers
+			# Bamboo plant was placed at counter height (z=0.92) but has no support there
+			var plant := ground.find_child("Ground_Plant", true, false) as Node3D
+			if plant:
+				plant.position.y -= 0.92
 		_find_doors()
 	else:
 		_add_fallback_floor()

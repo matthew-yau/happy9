@@ -5,9 +5,9 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"      # Invoke-WebRequest is very slow with the progress bar
 
 $GodotVer = "4.7.2-stable"
-$GdcefTag = "v0.21.0-godot4"
-$GdcefZip = "gdcef-0.21.0_godot-4.7.zip"
 $GodotZip = "Godot_v${GodotVer}_win64.exe.zip"
+$GodotCefVer = "2.1.3"
+$GodotCefZip = "godot_cef-v${GodotCefVer}.zip"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Dl = Join-Path $Root "build\downloads"
@@ -34,7 +34,19 @@ function Get-File($url, $name) {
 
 New-Item -ItemType Directory -Force $Dl | Out-Null
 $godot = Get-File "https://github.com/godotengine/godot/releases/download/$GodotVer/$GodotZip" $GodotZip
-$cef = Get-File "https://github.com/Lecrapouille/gdcef/releases/download/$GdcefTag/$GdcefZip" $GdcefZip
+
+# Godot CEF is ~1 GB; use curl.exe (Windows 10+) for resume support on large downloads
+$cefDest = Join-Path $Dl $GodotCefZip
+if (-not (Test-Zip $cefDest)) {
+    Write-Host "downloading $GodotCefZip (~1 GB, may take a while) ..."
+    $cefUrl = "https://github.com/dsh0416/godot-cef/releases/download/v${GodotCefVer}/$GodotCefZip"
+    while ($true) {
+        & curl.exe -C - -fL --max-time 1800 -o $cefDest $cefUrl
+        if (Test-Zip $cefDest) { break }
+        Write-Host "  incomplete, resuming in 3s..."; Start-Sleep 3
+    }
+}
+Write-Host "have $GodotCefZip"
 
 Write-Host "assembling $Out ..."
 if (Test-Path $Out) { Remove-Item $Out -Recurse -Force }
@@ -49,27 +61,24 @@ foreach ($e in $z.Entries) {
 }
 $z.Dispose()
 
-# the game project, without the import cache and other platforms' Chromium
+# game source (addons/godot_cef extracted from zip below; cef_artifacts is the old gdcef path)
 $src = Join-Path $Root "RoomGame"
-robocopy $src $game /E /NFL /NDL /NJH /NJS /NP /XD (Join-Path $src ".godot") (Join-Path $src "cef_artifacts\windows") (Join-Path $src "cef_artifacts\macos") (Join-Path $src "cef_artifacts\linux") | Out-Null
+robocopy $src $game /E /NFL /NDL /NJH /NJS /NP /XD (Join-Path $src ".godot") (Join-Path $src "cef_artifacts") (Join-Path $src "addons\godot_cef") | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "copying the project failed (robocopy $LASTEXITCODE)" }
 
-# this platform's Chromium only
-$prefix = "gdcef/cef_artifacts/windows/"
-$dst = Join-Path $game "cef_artifacts\windows"
-$z = [IO.Compression.ZipFile]::OpenRead($cef)
-$n = 0
+# extract Godot CEF addon (all platforms; Godot loads only the matching one at runtime)
+$prefix = "dist/addons/godot_cef/"
+$cefAddon = Join-Path $game "addons\godot_cef"
+New-Item -ItemType Directory -Force $cefAddon | Out-Null
+$z = [IO.Compression.ZipFile]::OpenRead($cefDest)
 foreach ($e in $z.Entries) {
     if (-not $e.FullName.StartsWith($prefix) -or $e.FullName.EndsWith("/")) { continue }
     $rel = $e.FullName.Substring($prefix.Length) -replace "/", "\"
-    if ($rel -like "*.lib" -or $rel -like "*.exp") { continue }
-    $target = Join-Path $dst $rel
+    $target = Join-Path $cefAddon $rel
     New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
     [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $target, $true)
-    $n++
 }
 $z.Dispose()
-if ($n -eq 0) { throw "no Windows files found in $GdcefZip" }
 
 Write-Host "importing the project (first run, takes a minute) ..."
 $log = Join-Path $Root "build\import_windows.log"

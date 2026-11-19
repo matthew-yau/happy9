@@ -1,10 +1,12 @@
 # Godot cache (rebuilt on import)
 RoomGame/.godot/
-# gdCEF Chromium binaries (too big for GitHub; download gdCEF 0.21.0 for Godot 4.7 and copy
-# cef_artifacts/windows + macos into RoomGame/cef_artifacts/)
+# Chromium binaries (too big for GitHub; build scripts download them at build time)
 RoomGame/cef_artifacts/windows/
 RoomGame/cef_artifacts/macos/
 RoomGame/cef_artifacts/linux/
+RoomGame/addons/godot_cef/bin/
+# macOS metadata
+.DS_Store
 # raw 3D scans of the real home + scan working files (private)
 *.fbx
 scans/
