@@ -28,7 +28,8 @@ const FIT := {
 }
 ## p2's rig: [bone that turns, bone at the end of the limb, side (-1 = left)]
 const P2_LIMBS := {
-	"arm": [["DEF-upper_arm.L", "DEF-hand.L", -1.0], ["DEF-upper_arm.R", "DEF-hand.R", 1.0]],
+	"arm": [["DEF-upper_arm.L", "DEF-hand.L", -1.0], ["DEF-upper_arm.R", "DEF-hand.R", 1.0],
+		["ORG-upper_arm.L", "ORG-hand.L", -1.0], ["ORG-upper_arm.R", "ORG-hand.R", 1.0]],
 	"leg": [["DEF-thigh.L", "DEF-foot.L", -1.0], ["DEF-thigh.R", "DEF-foot.R", 1.0]],
 }
 const PILLOW := 0.12           # pillow top above the mattress (build_room.py)
@@ -523,11 +524,13 @@ func _pose_arms(k: Callable) -> void:
 					var d := theirs - mine
 					d.y = 0
 					d = d.normalized() if d.length() > 0.01 else -flat_basis.z
-					var right := d.cross(Vector3.UP)
+					var right := d.cross(Vector3.UP)    # your right (d = toward them)
+					# Each hand goes round its own side of them (left hand on your left),
+					# reaching a little past their middle toward their back
 					if action == Action.HUG:
-						target = theirs - right * s * 0.3
+						target = theirs + right * s * 0.24 + d * 0.08
 					else:
-						target = theirs - Vector3(0, 0.12, 0) - right * s * 0.25 - d * 0.05
+						target = theirs - Vector3(0, 0.12, 0) + right * s * 0.25 - d * 0.05
 					pole = Vector3(s, -0.2, 0.3)
 			_arm_target[i] = target
 			target_local = relaxed.lerp(to_local * target, _act)
