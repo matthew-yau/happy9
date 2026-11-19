@@ -901,6 +901,7 @@ func _claim_device(d) -> void:
 	if net.online:
 		d.seq += 1
 		d.driver = net.my_id()
+	d.sync_t = 0.0                 # your own page now: don't jump it to the old driver's spot
 
 
 ## Take a message from `from` about who's using the device? (the newest claim wins;
@@ -959,6 +960,7 @@ func _device_party(net_id: String, seq: int, url: String, t: float, paused: bool
 	if has_video:
 		d.sync_t = t + 0.15          # stored so load_finished can re-apply after page loads
 		d.sync_paused = paused
+		d.sync_at = Time.get_ticks_msec()
 		laptop.apply_video_state(d, t + 0.15, paused)   # + roughly the network delay
 
 

@@ -49,6 +49,9 @@ class Device:
 	var shared_url := ""           # URL last set by load_shared; suppresses url_changed claim
 	var sync_t := 0.0              # last received video time (re-applied after page loads)
 	var sync_paused := true
+	var sync_at := 0               # Time.get_ticks_msec() when sync_t arrived
+	var shared_at := 0             # when load_shared last navigated (the page may still be loading)
+	var actual_url := ""           # where the browser really is (CefTexture.url is only what was asked for)
 	var page_title := ""           # the page's own title (not our messages in it)
 	var page_size := PAGE_SIZE
 	var is_phone := false          # a player's smartphone (main.gd makes one per player)
@@ -264,16 +267,25 @@ func ensure_browser(d: Device) -> bool:
 	node.connect("focus_exited", func(): page_focused = false)
 	if node.has_signal("url_changed"):
 		node.connect("url_changed", func(new_url: String):
-			if new_url == d.shared_url:
-				d.shared_url = ""    # consumed the expected change; next one is user navigation
+			d.actual_url = new_url
+			# Only you clicking around in the open browser window counts as taking the device
+			# over. Redirects, "/" added to an address, YouTube rewriting its own URL or playing
+			# the next video happen on everyone's screen and must not steal it from the driver.
+			if not (visible and active == d):
 				return
-			if new_url == "" or new_url.begins_with("about:"):
+			if new_url == "" or new_url.begins_with("about:") or same_page(new_url, d.shared_url):
 				return
+			d.shared_url = ""
 			page_touched.emit(d.id))
 	if node.has_signal("load_finished"):
-		node.connect("load_finished", func(success: bool):
-			if success and d.sync_t > 0.0:
-				apply_video_state(d, d.sync_t, d.sync_paused))
+		# load_finished(url, http_status_code): the page someone else picked has loaded -
+		# jump its video to where theirs is now (the earlier seek ran before the video existed)
+		node.connect("load_finished", func(_url = "", _code = 0):
+			if d.sync_t > 0.0:
+				var t := d.sync_t
+				if not d.sync_paused:
+					t += (Time.get_ticks_msec() - d.sync_at) / 1000.0
+				apply_video_state(d, t, d.sync_paused))
 	_hook_audio(d, node)
 	d.cef = node
 	_making[d.id] = false
@@ -295,7 +307,7 @@ func _on_ipc_message(d: Device, msg: String) -> void:
 func _refresh_title() -> void:
 	if browser == null:
 		return
-	var url: String = browser.url
+	var url: String = page_url(active)
 	current_url = url
 	if not url_bar.has_focus():
 		url_bar.text = url
@@ -924,16 +936,30 @@ func _hook_audio(d: Device, node) -> void:
 	d.speaker.play()
 
 
+## Same page? (ignores a trailing "/" and the #fragment, which browsers add / change themselves)
+static func same_page(a: String, b: String) -> bool:
+	if b == "":
+		return false
+	return a.split("#")[0].trim_suffix("/") == b.split("#")[0].trim_suffix("/")
+
+
 func page_url(d: Device) -> String:
-	return d.cef.url if d and d.cef else ""
+	if d == null or d.cef == null:
+		return ""
+	return d.actual_url if d.actual_url != "" else d.cef.url
 
 
 ## Open the same page as the person using the device
 func load_shared(d: Device, url: String) -> void:
 	if d.cef == null or url == "":
 		return
-	if page_url(d).split("#")[0] == url.split("#")[0]:
+	if same_page(page_url(d), url):
 		return
+	# Asked for it a moment ago and it's still loading: don't restart the load every 0.5 s.
+	# (If an earlier page finished loading after it and won, this asks again.)
+	if same_page(d.shared_url, url) and Time.get_ticks_msec() - d.shared_at < 4000:
+		return
+	d.shared_at = Time.get_ticks_msec()
 	d.shared_url = url     # tells url_changed this navigation is from the network, not the user
 	d.cef.url = url
 	if d == active:

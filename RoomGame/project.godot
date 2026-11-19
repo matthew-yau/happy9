@@ -31,6 +31,7 @@ common/physics_ticks_per_second=120
 
 [godot_cef]
 
+advanced/custom_command_line_switches="autoplay-policy=no-user-gesture-required"
 audio/enable_audio_capture=true
 storage/data_path="user://godot_cef_cache"
 
