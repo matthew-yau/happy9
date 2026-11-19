@@ -15,3 +15,6 @@ backup_before_multiplayer/
 .claude/settings.local.json
 *.log
 ~*.TMP
+
+# local game builds (scripts/build_game.*)
+build/
