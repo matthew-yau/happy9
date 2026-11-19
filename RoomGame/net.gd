@@ -38,6 +38,13 @@ func my_id() -> int:
 	return multiplayer.get_unique_id()
 
 
+## Online AND actually talking to the others (not still "Connecting ..."): only then can we send RPCs
+func connected() -> bool:
+	return online and multiplayer.multiplayer_peer != null \
+		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED \
+		and multiplayer.get_peers().size() > 0
+
+
 func is_host() -> bool:
 	return not online or multiplayer.is_server()
 
@@ -77,7 +84,7 @@ func join(address: String) -> String:
 
 ## Tell everyone your (new) name / character / colour
 func send_profile() -> void:
-	if online:
+	if connected():
 		_profile.rpc(my_name, my_style, my_color)
 
 
@@ -114,6 +121,7 @@ static func local_addresses() -> PackedStringArray:
 
 func _on_peer_connected(id: int) -> void:
 	_profile.rpc_id(id, my_name, my_style, my_color)
+	main.send_my_phone_to(id)
 	if multiplayer.is_server():
 		main.send_world_to(id)
 	_update_count()
@@ -154,6 +162,7 @@ func _update_count() -> void:
 
 func _remove(id: int) -> void:
 	if remotes.has(id):
+		main.on_remote_removed(id)
 		remotes[id].queue_free()
 		remotes.erase(id)
 
@@ -168,6 +177,7 @@ func _profile(player_name: String, style: String, color: Color) -> void:
 		players_root.add_child(rp)
 		remotes[id] = rp
 	remotes[id].setup(id, player_name.substr(0, 20), style if style in Avatar.STYLES else "p2", color)
+	main.on_remote_profile(id, remotes[id])
 	_update_count()
 
 
@@ -201,7 +211,7 @@ func _process(_delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not online or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+	if not connected():
 		return
 	_send_timer += delta
 	if _send_timer >= 1.0 / SEND_RATE:
