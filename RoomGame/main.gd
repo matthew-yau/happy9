@@ -144,6 +144,8 @@ func _ready() -> void:
 	laptop.opened.connect(func(): player.input_locked = true)
 	laptop.closed.connect(func(): player.input_locked = false)
 	_make_devices()
+	_make_my_phone()
+	laptop.put_away.connect(_on_phone_put_away)
 	_make_mirrors()
 	_init_quality()
 	laptop.page_touched.connect(_on_device_touched)
@@ -398,13 +400,13 @@ func toggle_desk_lamp() -> void:
 	if desk_on and desk_level <= 0.0:
 		desk_level = 2.2
 	_apply()
-	if net.online:
+	if net.connected():
 		_net_desk.rpc(desk_on, desk_level)
 
 
 func change_mode(new_mode: int) -> void:
 	set_mode(new_mode)
-	if net.online:
+	if net.connected():
 		_net_mode.rpc(new_mode)
 
 
@@ -467,13 +469,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if interaction != 0:
 		return                                # busy hugging / kissing someone
+	if event.physical_keycode == KEY_M:
+		take_out_phone()
+		return
 	match event.physical_keycode:
 		KEY_1: change_mode(1)
 		KEY_2: change_mode(2)
 		KEY_3: change_mode(3)
 		KEY_4: change_mode(4)
 		KEY_L:
-			var dev := _device_near()
+			var phone := _friend_phone_in_view()
+			var dev := phone if phone != "" else _device_near()
 			if dev != "":
 				use_device(dev)
 		KEY_H:
@@ -487,7 +493,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				hugging_bear = true
 		KEY_T:
 			var dev := _device_near()
-			if dev != "":
+			if dev != "" and not _device(dev).is_phone:
 				set_device_power(dev, not _device(dev).on)
 		KEY_P:
 			var dev := _device_near()
@@ -506,7 +512,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_desk_lamp()
 			elif sitting_in == null and not lying_in_bed and _door_in_view() >= 0:
 				toggle_door(_door_in_view())
-			elif sitting_in == null and not lying_in_bed and _device_in_view() != "":
+			elif sitting_in == null and not lying_in_bed and _device_in_view() != "" 					and not _device(_device_in_view()).is_phone:
 				set_device_power(_device_in_view(), not _device(_device_in_view()).on)
 			elif sitting_in != null:
 				stand_up()
@@ -581,7 +587,7 @@ func _door_in_view() -> int:
 
 func toggle_door(i: int) -> void:
 	doors[i]["open"] = not doors[i]["open"]
-	if net.online:
+	if net.connected():
 		_net_door.rpc(i, doors[i]["open"])
 
 
@@ -621,6 +627,7 @@ func _process(delta: float) -> void:
 			bodies.append([-rp.global_position.z, rp.avatar.lie_top()])
 		blanket.fit(bodies)
 	_update_devices(delta)
+	_update_phones()
 
 	if lobby.visible or laptop.visible:
 		hint_label.text = ""
@@ -635,6 +642,10 @@ func _process(delta: float) -> void:
 	elif _player_in_view() != 0 and not lying_in_bed:
 		var who: String = net.name_for(_player_in_view())
 		hint_label.text = "H  hug %s     K  kiss %s" % [who, who]
+		if _friend_phone_in_view() != "":
+			hint_label.text += "     L  join %s's phone" % who
+	elif _friend_phone_in_view() != "":
+		hint_label.text = "L  join %s's phone" % net.name_for(_friend_phone_in_view().to_int())
 	elif _looking_at_bear():
 		hint_label.text = "E  pick up Bob     H  hug him"
 	elif _looking_at_desk_lamp():
@@ -646,12 +657,14 @@ func _process(delta: float) -> void:
 		hint_label.text = "E  get up     " + _device_hint("laptop")
 	elif _door_in_view() >= 0:
 		hint_label.text = "E  %s the door" % ("close" if doors[_door_in_view()]["open"] else "open")
-	elif _device_in_view() != "":
+	elif _device_in_view() != "" and not _device(_device_in_view()).is_phone:
 		hint_label.text = _device_hint(_device_in_view()).replace("T  turn", "E  turn")
 	elif _chair_in_view() != null:
 		hint_label.text = "E  sit"
 	elif _thing_in_view("Bed") != null:
 		hint_label.text = "E  lie down"
+	elif _device(MY_PHONE) and _device(MY_PHONE).on:
+		hint_label.text = "M  look at your phone"
 	else:
 		hint_label.text = ""
 	# While you sit / lie and watch, the same hint fades away after a few seconds
@@ -807,6 +820,8 @@ func _device_in_view() -> String:
 	var best := ""
 	var best_dot := 0.0
 	for d in laptop.devices.values():
+		if d.is_phone and (d.mine or not d.on):
+			continue                           # your own phone is M; others' only while it's out
 		var c: Vector3 = d.screen.global_position
 		var to := c - cam.origin
 		var dist := to.length()
@@ -833,6 +848,8 @@ func _device_near() -> String:
 	var best := ""
 	var best_d := DEVICE_REACH
 	for d in laptop.devices.values():
+		if d.is_phone:
+			continue                           # phones: look at the person holding it
 		var dist: float = d.screen.global_position.distance_to(_eye().origin)
 		if dist < best_d and _can_see(d.screen.global_position):
 			best = d.id
@@ -844,6 +861,8 @@ func use_device(id: String) -> void:
 	var d = _device(id)
 	if d == null:
 		return
+	if d.is_phone and not d.mine and not d.on:
+		return                                # their phone is in their pocket
 	if not d.on:
 		set_device_power(id, true)
 	_claim_device(d)
@@ -857,13 +876,18 @@ func set_device_power(id: String, on: bool) -> void:
 	if on:
 		_claim_device(d)
 	laptop.set_power(d, on)
-	_toast("%s %s" % [d.title, "on" if on else "off"], 1.5)
-	if net.online:
-		_net_power.rpc(id, on, d.seq)
+	if d.is_phone:
+		_toast("Phone out  -  a friend can look at you and press L to join" if on
+			else "Phone away", 2.0)
+	else:
+		_toast("%s %s" % [d.title, "on" if on else "off"], 1.5)
+	if net.connected():
+		_net_power.rpc(_net_dev_id(id), on, d.seq)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _net_power(id: String, on: bool, seq: int) -> void:
+func _net_power(net_id: String, on: bool, seq: int) -> void:
+	var id := _local_dev_id(net_id)
 	var d = _device(id)
 	if d == null:
 		return
@@ -909,22 +933,22 @@ func _update_devices(delta: float) -> void:
 		return
 	_dev_timer = 0.0
 	for d in laptop.devices.values():
-		if not d.on or d.browser == null:
+		if not d.on or d.cef == null:
 			continue
 		# The TV shows the video full screen unless you've got the remote in your hand
 		if d.fill_video:
 			laptop.fill_screen(d, not (laptop.visible and laptop.active == d))
 		laptop.request_video_state(d)            # answer arrives in d.video
-		if net.online and d.driver == net.my_id():
+		if net.connected() and d.driver == net.my_id():
 			var url: String = laptop.page_url(d)
 			var v: Dictionary = d.video
 			var has_video: bool = v.get("u", "") == url
-			_device_party.rpc(d.id, d.seq, url, float(v.get("t", 0.0)), bool(v.get("p", true)), has_video)
+			_device_party.rpc(_net_dev_id(d.id), d.seq, url, float(v.get("t", 0.0)), bool(v.get("p", true)), has_video)
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func _device_party(id: String, seq: int, url: String, t: float, paused: bool, has_video: bool) -> void:
-	var d = _device(id)
+func _device_party(net_id: String, seq: int, url: String, t: float, paused: bool, has_video: bool) -> void:
+	var d = _device(_local_dev_id(net_id))
 	if d == null or not _accept_driver(d, multiplayer.get_remote_sender_id(), seq):
 		return
 	if not d.on:
@@ -933,6 +957,8 @@ func _device_party(id: String, seq: int, url: String, t: float, paused: bool, ha
 		return
 	laptop.load_shared(d, url)
 	if has_video:
+		d.sync_t = t + 0.15          # stored so load_finished can re-apply after page loads
+		d.sync_paused = paused
 		laptop.apply_video_state(d, t + 0.15, paused)   # + roughly the network delay
 
 
@@ -944,8 +970,133 @@ func _party_driver_left(id: int) -> void:
 
 func _send_devices_to(id: int) -> void:
 	for d in laptop.devices.values():
-		if d.on:
+		if d.on and not d.is_phone:            # phones: each player sends their own (net.gd)
 			_net_power.rpc_id(id, d.id, true, d.seq)
+
+
+# ---------------------------------------------------------------- smartphones
+# Everyone has a phone. M takes yours out: a phone with a home screen and a Chrome app comes
+# up ("Keep in hand" lowers it - still playing in your hand; Esc or Put away puts it away). While it's
+# out, a friend can look at you and press L to join it - they see the same page and can tap
+# and type on it too (the same sharing as the TV: whoever touches it last drives it).
+# Locally your phone is the device "phone_me"; over the network it's "phone_<your peer id>".
+
+const MY_PHONE := "phone_me"
+const PHONE_SIZE := Vector2(0.072, 0.152)        # the screen, metres
+const PHONE_IN_HAND := Vector3(0.1, -0.16, -0.34) # your phone, from your eyes (bottom right)
+
+
+## The phone model: a dark slab with the screen on the side facing whoever holds it (+Z)
+func _make_phone(id: String, title: String, parent: Node3D, mine: bool) -> void:
+	var rig := Node3D.new()
+	rig.name = "Phone_" + id
+	rig.visible = false
+	parent.add_child(rig)
+	var body := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(PHONE_SIZE.x + 0.008, PHONE_SIZE.y + 0.012, 0.008)
+	body.mesh = box
+	var bm := StandardMaterial3D.new()
+	bm.albedo_color = Color(0.08, 0.08, 0.1)
+	bm.metallic = 0.6
+	bm.roughness = 0.3
+	body.material_override = bm
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	rig.add_child(body)
+	var screen := MeshInstance3D.new()
+	screen.name = "Screen_" + id
+	var quad := QuadMesh.new()
+	quad.size = PHONE_SIZE
+	screen.mesh = quad
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	screen.material_override = sm
+	screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	screen.position.z = 0.0042
+	rig.add_child(screen)
+	var speaker := AudioStreamPlayer3D.new()
+	speaker.name = "Speaker_" + id
+	speaker.unit_size = 1.5
+	speaker.max_distance = 6.0
+	rig.add_child(speaker)
+	var d = laptop.add_device(id, title, screen, speaker, null, "https://www.google.com", false)
+	d.is_phone = true
+	d.mine = mine
+	d.page_size = laptop.PHONE_PAGE_SIZE
+	d.rig = rig
+
+
+func _make_my_phone() -> void:
+	_make_phone(MY_PHONE, "Your phone", $Player/Head, true)
+	var rig: Node3D = _device(MY_PHONE).rig
+	rig.position = PHONE_IN_HAND
+	rig.rotation = Vector3(deg_to_rad(-20), deg_to_rad(-15), 0)   # tilted up toward your eyes
+
+
+## M: take your phone out (or bring it back up if it's already out)
+func take_out_phone() -> void:
+	use_device(MY_PHONE)
+
+
+func _on_phone_put_away(id: String) -> void:
+	if id == MY_PHONE:
+		set_device_power(id, false)
+	else:
+		laptop.close()                        # stop watching a friend's phone
+
+
+## Device ids over the network: your "phone_me" is "phone_<your peer id>" to everyone else
+func _net_dev_id(id: String) -> String:
+	return "phone_%d" % net.my_id() if id == MY_PHONE else id
+
+
+func _local_dev_id(id: String) -> String:
+	return MY_PHONE if id == "phone_%d" % net.my_id() else id
+
+
+## net.gd: someone joined or changed their name - they get a phone (in their hand)
+func on_remote_profile(peer: int, rp) -> void:
+	var id := "phone_%d" % peer
+	var title := "%s's phone" % rp.display_name
+	if _device(id):
+		_device(id).title = title
+		return
+	_make_phone(id, title, rp, false)
+
+
+func on_remote_removed(peer: int) -> void:
+	laptop.remove_device("phone_%d" % peer)
+
+
+## net.gd: a new player connected - tell them whether your phone is out
+func send_my_phone_to(peer: int) -> void:
+	var d = _device(MY_PHONE)
+	if d and d.on:
+		_net_power.rpc_id(peer, _net_dev_id(MY_PHONE), true, d.seq)
+
+
+## The id of the phone of the friend you're looking at, if it's out ("" if not)
+func _friend_phone_in_view() -> String:
+	var seen := _device_in_view()
+	if seen != "" and _device(seen).is_phone:
+		return seen
+	var someone := _player_in_view()
+	if someone != 0:
+		var d = _device("phone_%d" % someone)
+		if d and d.on:
+			return d.id
+	return ""
+
+
+## Friends' phones are held in front of them, a little below their eyes
+func _update_phones() -> void:
+	for peer in net.remotes:
+		var d = _device("phone_%d" % peer)
+		var rp = net.remotes[peer]
+		if d == null or rp.avatar == null or not d.on:
+			continue
+		d.rig.position = Vector3(0.08, rp.avatar.eye_height - 0.28, -0.3)
+		d.rig.rotation.x = deg_to_rad(-25)   # screen tilted up toward their face
 
 
 func _device_hint(id: String) -> String:
@@ -1145,7 +1296,7 @@ func pick_up_bear() -> void:
 		return
 	# Keep whatever way he was lying, relative to the way you're facing
 	bear_spin = (Basis(Vector3.UP, -player.rotation.y) * bear.global_basis).orthonormalized()
-	if net.online and not multiplayer.is_server():
+	if net.connected() and not multiplayer.is_server():
 		_req_pick.rpc_id(1)                   # ask the host; it tells everyone who has him
 	else:
 		_server_pick(net.my_id())
@@ -1158,7 +1309,7 @@ func drop_bear() -> void:
 	hugging_bear = false
 	if bear_mesh:
 		bear_mesh.scale = Vector3.ONE
-	if net.online and not multiplayer.is_server():
+	if net.connected() and not multiplayer.is_server():
 		_bob_target = xf
 		_bob_has_target = true
 		_req_drop.rpc_id(1, xf, vel)
@@ -1183,14 +1334,14 @@ func _req_drop(xf: Transform3D, vel: Vector3) -> void:
 func _server_pick(id: int) -> void:
 	if bob_holder != 0:
 		return
-	if net.online:
+	if net.connected():
 		_bob_holder_changed.rpc(id)
 	else:
 		_bob_holder_changed(id)
 
 
 func _server_drop(xf: Transform3D, vel: Vector3) -> void:
-	if net.online:
+	if net.connected():
 		_bob_holder_changed.rpc(0)
 	else:
 		_bob_holder_changed(0)
@@ -1279,7 +1430,7 @@ func _physics_process(delta: float) -> void:
 			xf.origin.lerp(_bob_target.origin, t))
 
 	# Stream Bob to everyone: the holder sends him, otherwise the host sends his physics
-	if net.online:
+	if net.connected():
 		_bob_send += delta
 		var i_send: bool = holding_bear or (bob_holder == 0 and multiplayer.is_server() and not bear.sleeping)
 		if i_send and _bob_send >= 1.0 / 30.0:
@@ -1300,7 +1451,7 @@ func _hold_bear(delta: float) -> void:
 		var s := 0.05 + 0.03 * sin(_hug_time * 5.0)
 		bear_mesh.scale = bear_mesh.scale.lerp(Vector3(1.0 + s, 1.0 - s, 1.0 + s), 1.0 - exp(-10.0 * delta))
 		if int(_hug_time * 2.5) != int((_hug_time - delta) * 2.5):
-			if net.online:
+			if net.connected():
 				net.hearts.rpc(centre + Vector3(0, 0.15, 0), 0.25)
 			else:
 				Hearts.burst(self, centre + Vector3(0, 0.15, 0), 0.25)
