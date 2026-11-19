@@ -495,12 +495,43 @@ func _hook_audio(d: Device) -> void:
 	# gdCEF can hand the page's sound to Godot: play it from the device's speaker
 	if d.speaker == null or not d.browser.has_method("set_audio_stream"):
 		return
+	# gdCEF sends Chromium's sound at 44.1 kHz (measured: playing it at 48 kHz ran the buffer dry
+	# ~30 times a second, which is the choppy sound). The generator resamples to Godot's own rate.
 	var gen := AudioStreamGenerator.new()
-	gen.mix_rate = 48000
-	gen.buffer_length = 0.25
+	gen.mix_rate = AUDIO_RATE
+	gen.buffer_length = 0.5
 	d.speaker.stream = gen
 	d.speaker.play()
-	d.browser.set_audio_stream(d.speaker.get_stream_playback())
+	d.speaker.stream_paused = true                  # _pump_audio starts it once some sound is queued
+	var pb := d.speaker.get_stream_playback() as AudioStreamGeneratorPlayback
+	_audio_cap[d.id] = pb.get_frames_available()    # = empty buffer
+	d.browser.set_audio_stream(pb)
+
+
+const AUDIO_RATE := 44100
+const AUDIO_START := int(AUDIO_RATE * 0.08)    # cushion before a speaker starts / restarts
+const AUDIO_MAX := int(AUDIO_RATE * 0.35)      # more queued than this = falling behind the picture
+var _audio_cap := {}                           # device id -> buffer size in frames
+
+
+## A little jitter buffer per speaker: sound arrives in bursts (once per frame), so wait until
+## a cushion is queued before playing, pause to refill if it ever runs dry, and drop the backlog
+## if it lags too far behind the video.
+func _pump_audio(d: Device) -> void:
+	if d.speaker == null or not _audio_cap.has(d.id):
+		return                                       # (a paused speaker reports playing = false)
+	var pb := d.speaker.get_stream_playback() as AudioStreamGeneratorPlayback
+	if pb == null:
+		return
+	var queued: int = _audio_cap[d.id] - pb.get_frames_available()
+	if d.speaker.stream_paused:
+		if queued >= AUDIO_START:
+			d.speaker.stream_paused = false
+	elif queued <= 0:
+		d.speaker.stream_paused = true
+	elif queued > AUDIO_MAX:
+		pb.clear_buffer()
+		d.speaker.stream_paused = true
 
 
 func page_url(d: Device) -> String:
@@ -589,6 +620,7 @@ func _check_title_message(d: Device) -> void:
 
 func _process(delta: float) -> void:
 	for d: Device in devices.values():
+		_pump_audio(d)
 		var tex: Texture2D = null
 		if d.browser:
 			_check_title_message(d)

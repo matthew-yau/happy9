@@ -188,9 +188,10 @@ for (x0, y0, x1, y1) in ((LAUN_X1 + 0.05, YN - 0.01, BATH_X1, YN), (LAUN_X1 + 0.
     wl.box(x0, y0, 0, x1, y1, 1.2, M["wall_tile"])
 wl.box(LAUN_X1 + 0.05, HALL_N + T, 0, BATH_DOOR[0] - 0.07, HALL_N + T + 0.01, 1.2, M["wall_tile"])
 wl.box(BATH_DOOR[1] + 0.07, HALL_N + T, 0, BATH_X1, HALL_N + T + 0.01, 1.2, M["wall_tile"])
-wl.box(BATH_X1 + T, HALL_N + T, 0, XE, HALL_N + T + 0.03, H, M["g_feature"])                 # TV room black wall
+FEAT_X0 = TV_OPEN[1] + 0.07                                                                 # (not across the doorway)
+wl.box(FEAT_X0, HALL_N + T, 0, XE, HALL_N + T + 0.03, H, M["g_feature"])                     # TV room black wall
 for k in range(1, 5):                                                                        # its panel joints
-    xx = BATH_X1 + T + k * (XE - BATH_X1 - T) / 5
+    xx = FEAT_X0 + k * (XE - FEAT_X0) / 5
     wl.box(xx - 0.003, HALL_N + T + 0.03, 0, xx + 0.003, HALL_N + T + 0.034, H, M["black"])
 # scullery splashback: white subway tiles
 wl.box(KIT_E, YN - 0.012, 0.9, SCUL_X1, YN, 1.55, M["g_subway"])
@@ -701,7 +702,7 @@ for z in (0.45, 0.85, 1.25, 1.65, 2.0):
         pn.rbox(x, HALL_N + T + 0.05, z + 0.02, x + w, HALL_N + T + 0.3, z + 0.02 + random.uniform(0.1, 0.3),
                 random.choice(TOYS + [M["glass"], M["box_card"], M["white"]]), r=0.015)
         x += w + 0.04
-pn.rbox(0.75, 7.0, 0, 1.05, 7.25, 0.25, M["white"], r=0.03)                              # step stool
+pn.rbox(0.45, 6.70, 0, 0.72, 6.95, 0.25, M["white"], r=0.03)                             # step stool (in the corner)
 pn.rbox(1.6, 7.25, 0.3, 1.7, 7.42, 0.9, M["towel"], r=0.02)                              # bag holder
 pn.finish()
 
@@ -758,16 +759,16 @@ sofa("G_TV_Sofa", 9.17, 8.70, 2.55, 0.95, "-y", M["g_sofa_dk"], 3,
      extra=lambda b, x0, y0, x1, y1: (b.rbox(x1 - 0.65, y1 - 0.42, 0.45, x1 - 0.25, y1 - 0.28, 0.85, M["g_stripe"], r=0.05, seg=3, tilt=12, axis="X"),
                                       b.rbox(x0 + 0.6, y0 + 0.25, 0.47, x0 + 1.3, y1 - 0.15, 0.55, M["g_throw"], r=0.05, seg=3)))
 sofa("G_TV_Armchair", 7.38, 8.70, 0.98, 0.95, "-y", M["g_sofa_dk"], 1)
-kb = Piece("Ground_Keyboard", solid=True, bevel=0.004)                                    # keyboard on a stand, west wall
-for y in (6.65, 7.25):
+kb = Piece("Ground_Keyboard", solid=True, bevel=0.004)                                    # keyboard on a stand, west wall (clear of the doorway)
+for y in (7.40, 8.00):
     kb.tube((6.25, y, 0), (6.6, y, 0.72), 0.015, M["black"])
     kb.tube((6.6, y, 0), (6.25, y, 0.72), 0.015, M["black"])
-kb.rbox(6.2, 6.5, 0.72, 6.62, 7.4, 0.82, M["black"], r=0.02)
+kb.rbox(6.2, 7.25, 0.72, 6.62, 8.15, 0.82, M["black"], r=0.02)
 for k in range(36):                                                                       # white keys
-    y = 6.58 + k * 0.022
+    y = 7.33 + k * 0.022
     kb.box(6.48, y, 0.82, 6.6, y + 0.019, 0.835, M["porcelain"])
 kb.finish()
-office_chair("Chair_G_Keyboard", 7.0, 6.95, 180)                                          # stool facing the keyboard (-X)
+office_chair("Chair_G_Keyboard", 7.0, 7.70, 180)                                          # stool facing the keyboard (-X)
 ctab = Piece("Ground_TV_Side_Table", solid=True, bevel=0.004)                             # white C-shaped laptop table
 ctab.sphere(8.75, 7.55, 0.74, 0.32, M["white"], scale=(1.0, 0.75, 0.05), seg=24)
 ctab.tube((9.0, 7.55, 0.05), (9.0, 7.55, 0.72), 0.022, M["white"])
