@@ -49,6 +49,7 @@ fetch "https://github.com/dsh0416/godot-cef/releases/download/v${GODOT_CEF_VER}/
       "$GODOT_CEF_ZIP" "$GODOT_CEF_SIZE"
 
 echo "assembling $OUT ..."
+xattr -rc "$OUT" 2>/dev/null || true   # clear Finder metadata that blocks rm -rf
 rm -rf "$OUT"
 mkdir -p "$OUT/game"
 ditto -x -k "$DL/$GODOT_ZIP" "$OUT"                       # -> Godot.app
