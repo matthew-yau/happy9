@@ -525,10 +525,10 @@ func _pose_arms(k: Callable) -> void:
 					d = d.normalized() if d.length() > 0.01 else -flat_basis.z
 					var right := d.cross(Vector3.UP)
 					if action == Action.HUG:
-						target = theirs + d * 0.05 - right * s * 0.22 + Vector3(0, s * 0.04, 0)
+						target = theirs - right * s * 0.3
 					else:
 						target = theirs - Vector3(0, 0.12, 0) - right * s * 0.25 - d * 0.05
-					pole = Vector3(s, -0.5, 0.0)
+					pole = Vector3(s, -0.2, 0.3)
 			_arm_target[i] = target
 			target_local = relaxed.lerp(to_local * target, _act)
 			pole_local = pole_local.lerp(to_local.basis * pole, _act)
@@ -646,6 +646,10 @@ func _pose_model_limbs(moving: float) -> void:
 				_aim_limb(limb, bb * Vector3(s * 0.2, -1.0, -0.3), 1.0)
 			continue
 		if arm:
+			# Bone-based idle: aim arms down and slightly out so they hang at sides, not T-pose
+			if not limb.has("node"):
+				var idle_w := (1.0 - _walk_w) * (1.0 - _act) * (1.0 - _sit)
+				_aim_limb(limb, bb * Vector3(s * 0.3, -0.95, 0.0), idle_w)
 			# Sitting: hands rest on the lap. Hugging / holding Bob: reach for them.
 			_aim_limb(limb, bb * Vector3(s * 0.35, -1.0, -0.8), _sit * 0.7)
 			var t = _arm_target[0 if s < 0.0 else 1]

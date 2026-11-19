@@ -75,7 +75,8 @@ func _load() -> void:
 	if cfg.load(PROFILE) == OK:
 		player_name = cfg.get_value("me", "name", player_name)
 		style = cfg.get_value("me", "style", style)
-		color = cfg.get_value("me", "color", color)
+		var default_color := COLORS[1] if style == "p3" else COLORS[0]
+		color = cfg.get_value("me", "color", default_color)
 		if not STYLES.has(style):
 			style = "p2"
 		address = cfg.get_value("me", "address", address)
@@ -193,6 +194,8 @@ func _build() -> void:
 		b.button_pressed = id == style
 		b.pressed.connect(func():
 			style = id
+			color = COLORS[1] if id == "p3" else COLORS[0]
+			_refresh_swatches(_color_buttons, color)
 			for other in _style_buttons:
 				_style_buttons[other].button_pressed = other == id)
 		_style_buttons[id] = b
