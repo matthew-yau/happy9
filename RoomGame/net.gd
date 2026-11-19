@@ -142,7 +142,7 @@ func _on_connected() -> void:
 
 func _on_failed() -> void:
 	leave()
-	main.on_connection_lost("Couldn't connect. Check the address, that your friend is hosting, that Tailscale is on for both of you, and that Windows Firewall allows the game.")
+	main.on_connection_lost("Couldn't connect. Check: correct address? friend clicked Host? Tailscale on for both? On Mac: System Settings → Network → Firewall → allow the game. On Windows: Windows Firewall → allow the game (Private AND Public).")
 
 
 func _on_server_gone() -> void:
