@@ -12,18 +12,21 @@ signal leave_game               # Esc menu: back to the start menu
 const COLORS := [Color(0.62, 0.86, 0.6), Color(1.0, 0.72, 0.78), Color(0.6, 0.78, 1.0),
 	Color(1.0, 0.86, 0.5), Color(0.78, 0.66, 0.95), Color(1.0, 0.68, 0.5), Color(0.55, 0.9, 0.88), Color(0.95, 0.95, 0.92)]
 const STYLES := {"p2": "Snoopy", "p3": "Miffy"}
+const MAPS := {"home": "Home (house)", "new": "New map"}
 const PROFILE := "user://profile.cfg"
 
 var player_name := "Player"
 var style := "p2"
 var color: Color = COLORS[0]
 var address := "127.0.0.1"
+var map := "home"
 
 var name_edit: LineEdit
 var ip_edit: LineEdit
 var status: Label
 var _color_buttons := []
 var _style_buttons := {}
+var _map_buttons := {}
 var paused := false             # true = showing as the in-game Esc menu
 var _title: Label
 var _start_box: VBoxContainer   # Play alone / Host / Join (start menu only)
@@ -80,6 +83,9 @@ func _load() -> void:
 		if not STYLES.has(style):
 			style = "p2"
 		address = cfg.get_value("me", "address", address)
+		map = cfg.get_value("me", "map", map)
+		if not MAPS.has(map):
+			map = "home"
 
 
 func _save() -> void:
@@ -92,6 +98,7 @@ func _save() -> void:
 	cfg.set_value("me", "style", style)
 	cfg.set_value("me", "color", color)
 	cfg.set_value("me", "address", address)
+	cfg.set_value("me", "map", map)
 	cfg.save(PROFILE)
 
 
@@ -219,6 +226,23 @@ func _build() -> void:
 	_start_box.add_theme_constant_override("separation", 10)
 	col.add_child(_start_box)
 	col = _start_box
+	col.add_child(_label("Map"))
+	var map_row := HBoxContainer.new()
+	map_row.add_theme_constant_override("separation", 8)
+	for id in MAPS:
+		var mb := Button.new()
+		mb.text = MAPS[id]
+		mb.toggle_mode = true
+		mb.custom_minimum_size = Vector2(150, 36)
+		mb.focus_mode = Control.FOCUS_NONE
+		mb.button_pressed = id == map
+		mb.pressed.connect(func():
+			map = id
+			for other in _map_buttons:
+				_map_buttons[other].button_pressed = other == id)
+		_map_buttons[id] = mb
+		map_row.add_child(mb)
+	col.add_child(map_row)
 	col.add_child(_big_button("Play alone", Color(0.3, 0.32, 0.4), func():
 		_save(); play_solo.emit()))
 	col.add_child(_big_button("Quit", Color(0.25, 0.25, 0.28), func():

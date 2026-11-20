@@ -17,6 +17,15 @@ const FLAT_PATH := "res://flat.glb"
 # The ground floor, downstairs (floor at Blender Z -2.76): modelled by build_ground.py from
 # ground_scan.fbx (laid out with the scan-to-room skill). The flat's stairs run down into it.
 const GROUND_PATH := "res://ground.glb"
+# The new map: a separate flat NOT joined to the house (build_newmap.py).
+# Placed 40 m east so Bob, screens and multiplayer all keep working.
+const NEWMAP_PATH := "res://newmap.glb"
+const NEWMAP_OFFSET := Vector3(40.0, 0.0, 0.0)
+const NEWMAP_SPAWN := Vector3(40.0 + 4.2, 0.05, -4.1)
+const NEWMAP_YAW := PI
+var _home_spawn: Vector3
+var _home_yaw := 0.0
+var _home_saved := false
 const DOOR_OPEN_DEG := -88.0      # the door swings into the bedroom (Blender -Y)
 const DOOR_SPEED := 2.2           # door open/close speed (1 / seconds)
 const Blanket := preload("res://blanket.gd")
@@ -132,6 +141,14 @@ func _ready() -> void:
 			var plant := ground.find_child("Ground_Plant", true, false) as Node3D
 			if plant:
 				plant.position.y -= 0.92
+		if ResourceLoader.exists(NEWMAP_PATH):
+			var newmap: Node3D = load(NEWMAP_PATH).instantiate()
+			newmap.name = "NewMap"
+			newmap.position = NEWMAP_OFFSET
+			add_child(newmap)
+			_hide_blender_cameras(newmap)
+			_prepare_flat(newmap)
+			_make_flat_lights(newmap)
 		_find_doors()
 	else:
 		_add_fallback_floor()
@@ -195,9 +212,29 @@ func _enter_room() -> void:
 	net.my_style = lobby.style
 	net.my_color = lobby.color
 	_make_my_avatar()
+	_go_to_map(lobby.map)
 	lobby.visible = false
 	player.in_menu = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## Put the player at the start of the chosen map ("home" = the house, "new" = the new map).
+## R respawns at that map's start.
+func _go_to_map(map: String) -> void:
+	if not _home_saved:
+		_home_saved = true
+		_home_spawn = player.spawn_point
+		_home_yaw = player.spawn_yaw
+	var want_new := map == "new" and get_node_or_null("NewMap") != null
+	var spot := NEWMAP_SPAWN if want_new else _home_spawn
+	var yaw := NEWMAP_YAW if want_new else _home_yaw
+	if player.spawn_point.is_equal_approx(spot):
+		return
+	player.spawn_point = spot
+	player.spawn_yaw = yaw
+	player.global_position = spot
+	player.rotation.y = yaw
+	player.velocity = Vector3.ZERO
 
 
 ## Esc in the game: the menu comes up (change name / character / colour); the game keeps
@@ -553,7 +590,9 @@ func _player_in_view() -> int:
 const DOOR_SWING := {"Door_Leaf": DOOR_OPEN_DEG, "Door_Toilet": -95.0, "Door_Bath": 95.0,
 	"Door_Closet_L": -100.0, "Door_Closet_R": 100.0,
 	# ground floor (build_ground.py): each swings into its room
-	"Door_G_Study": -95.0, "Door_G_Laundry": -95.0, "Door_G_Bath": 95.0}
+	"Door_G_Study": -95.0, "Door_G_Laundry": -95.0, "Door_G_Bath": 95.0,
+	# new map (build_newmap.py)
+	"Door_N_Bedroom": -95.0, "Door_N_Wet": 95.0}
 var doors: Array = []              # [{node, open, t, deg}], sorted by name (same order for everyone)
 
 
@@ -707,6 +746,9 @@ const DEVICES := [
 	["tv_g", "TV", "Ground_TV_Screen", Vector3(0, 0, -1), "https://www.youtube.com", true],
 	["tv_g2", "TV", "Ground_TV2_Screen", Vector3(0, 0, -1), "https://www.youtube.com", true],
 	["pc_g", "Computer", "Ground_PC_Screen", Vector3(-1, 0, 0), "https://www.google.com", false],
+	# new map (newmap.glb)
+	["tv_n", "TV", "NewMap_TV_Screen", Vector3(0, 0, -1), "https://www.youtube.com", true],
+	["pc_n", "Computer", "NewMap_PC_Screen", Vector3(0, 0, -1), "https://www.google.com", false],
 ]
 const DEVICE_REACH := 3.4        # how close you need to be to use / switch a screen
 var _dev_timer := 0.0
