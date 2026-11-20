@@ -67,6 +67,10 @@ CL_X0, CL_X1, CL_Y1 = 4.50, 7.50, 5.50
 WET_X0, WET_X1 = 8.20, 9.72
 LIV_S_W, LIV_S_E = 1.77, 0.80      # south wall lines (west part / east part)
 LIV_X1 = 8.10                      # living room's east end = the wet room's west wall
+# kitchen (west) + entry hallway (east) south of the living room
+KIT_Y0 = -1.60                     # outer south wall of kitchen / hallway
+KIT_X1 = 3.80                      # dividing wall between kitchen and hallway
+HALL_X1 = 6.80                     # east wall of entry hallway
 
 # ------------------------------------------------------------------ floors, ceiling, outside
 fl = Piece("NewMap_Floors", solid=True)
@@ -75,13 +79,17 @@ fl.box(3.85, LIV_S_E, -0.05, LIV_X1, LIV_N, 0.0, M["oak"])
 fl.box(BED_X0, BED_Y0, -0.05, BED_X1 + T, BED_Y1, 0.0, M["carpet"])
 fl.box(CL_X0, LIV_N, -0.05, CL_X1, CL_Y1, 0.0, M["oak"])
 fl.box(LIV_X1, 0.0, -0.05, WET_X1, LIV_N, 0.0, M["tile"])
+fl.box(0.0, KIT_Y0, -0.05, KIT_X1, LIV_S_W, 0.0, M["oak"])        # kitchen floor
+fl.box(KIT_X1, KIT_Y0, -0.05, HALL_X1, LIV_S_E, 0.0, M["oak"])    # entry hallway floor
 fl.finish()
 
 # one flat ceiling slab over everything (one piece per room outline)
 ce = Piece("NewMap_Ceiling", solid=True)
 for (x0, y0, x1, y1) in ((0.0, LIV_S_W, 3.90, LIV_N), (3.85, LIV_S_E, LIV_X1, LIV_N),
                          (BED_X0, BED_Y0, BED_X1 + T, BED_Y1), (CL_X0, LIV_N, CL_X1, CL_Y1),
-                         (LIV_X1, 0.0, WET_X1, LIV_N)):
+                         (LIV_X1, 0.0, WET_X1, LIV_N),
+                         (0.0, KIT_Y0, KIT_X1, LIV_S_W),           # kitchen ceiling
+                         (KIT_X1, KIT_Y0, HALL_X1, LIV_S_E)):      # hallway ceiling
     ce.box(x0 - T, y0 - T, H, x1 + T, y1 + T, H + 0.05, M["ceiling"])
 ce.finish()
 
@@ -104,9 +112,15 @@ wall(wl, -T, LIV_N, 8.20, LIV_N + T,
      holes=[(0.15, 1.00, 0, 2.04), (6.00, 7.00, 0, 2.04)])                             # bedroom door, cupboard opening
 # living room: west wall (with a glass door out to a balcony), south walls, the little jog
 wall(wl, -T, LIV_S_W - T, 0.0, LIV_N, holes=[(1.85, 2.95, 0, 2.10)])
-wall(wl, -T, LIV_S_W - T, 3.90, LIV_S_W)
+wall(wl, -T, LIV_S_W - T, 3.90, LIV_S_W, holes=[(0.3, 3.5, 0, 2.04)])  # arch into kitchen
 wall(wl, 3.85, LIV_S_E - T, 3.95, LIV_S_W)
-wall(wl, 3.85, LIV_S_E - T, LIV_X1 + T, LIV_S_E, holes=[(5.20, 6.10, 0, 2.04)])         # front door
+wall(wl, 3.85, LIV_S_E - T, LIV_X1 + T, LIV_S_E,
+     holes=[(KIT_X1 + 0.05, HALL_X1 - 0.05, 0, 2.04)])                  # arch into hallway
+# kitchen / hallway outer walls and dividers
+wall(wl, -T, KIT_Y0 - T, HALL_X1 + T, KIT_Y0,
+     holes=[(4.90, 5.80, 0, 2.04)])                                      # south wall + front door
+wall(wl, KIT_X1, KIT_Y0 - T, KIT_X1 + T, LIV_S_E)                      # divider kitchen / hallway
+wall(wl, HALL_X1, KIT_Y0 - T, HALL_X1 + T, LIV_S_E)                    # hallway east wall
 # cupboard walls
 wall(wl, CL_X0 - T, LIV_N, CL_X0, CL_Y1 + T)
 wall(wl, CL_X0 - T, CL_Y1, CL_X1 + T, CL_Y1 + T)
@@ -137,9 +151,9 @@ gl.box(-0.04, 1.88, 0.02, -0.02, 2.92, 2.08, M["glass"])               # balcony
 gl.box(-0.07, 1.88, 0.02, -0.05, 2.40, 2.08, M["glass"])
 gl.box(3.12, BED_Y1 + 0.04, 0.92, 3.58, BED_Y1 + 0.06, 2.08, M["glass"])
 gl.finish()
-# a shut front door
+# a shut front door (at the south end of the entry hallway)
 fd = Piece("NewMap_Front_Door", solid=True)
-closed_door(fd, True, LIV_S_E - T, LIV_S_E, 5.20, 6.10, handle_side=1)
+closed_door(fd, True, KIT_Y0 - T, KIT_Y0, 4.90, 5.80, handle_side=1)
 fd.finish()
 # doors that open with E: hinge on the post, leaf runs along the hole
 hinged_door("Door_N_Bedroom", 1.00, LIV_N + T / 2, "-x", 0.85)         # opens into the bedroom
@@ -273,6 +287,37 @@ for k, (cx, cy, rot) in enumerate(((6.7, 2.05, 90), (7.3, 2.05, 90), (6.7, 3.45,
 ac = Piece("NewMap_AC", solid=True, bevel=0.008)
 ac.rbox(2.5, LIV_N - 0.015, 1.75, 3.1, LIV_N, 2.05, M["white"], r=0.025)
 ac.finish()
+
+# ------------------------------------------------------------------ kitchen
+# galley kitchen: white lower cabinets + marble-look counter along south wall,
+# wooden upper cabinets, gas hob; step ladder in corner (from reference photo)
+kc = Piece("NewMap_Kitchen", solid=True, bevel=0.006)
+# lower units along south wall
+kc.rbox(0.06, KIT_Y0 + 0.02, 0.0, 3.60, KIT_Y0 + 0.58, 0.88, M["white"], r=0.01)
+# countertop (white marble-look tile)
+kc.rbox(0.04, KIT_Y0 + 0.02, 0.88, 3.62, KIT_Y0 + 0.60, 0.92, M["tile"], r=0.004, seg=1)
+# gas hob (black surface + four steel burner rings)
+kc.rbox(1.60, KIT_Y0 + 0.03, 0.92, 2.60, KIT_Y0 + 0.59, 0.935, M["black"], r=0.004)
+for hx in (1.75, 2.10, 2.45):
+    kc.cyl(hx, KIT_Y0 + 0.30, 0.935, 0.07, 0.008, M["steel"], seg=16)
+# upper cabinets along south wall (wood)
+kc.rbox(0.06, KIT_Y0 + 0.30, 1.52, 3.60, KIT_Y0 + 0.36, 2.26, M["wood_lt"], r=0.008)
+# lower unit along west wall
+kc.rbox(0.02, KIT_Y0 + 0.58, 0.0, 0.60, LIV_S_W - 0.1, 0.88, M["white"], r=0.01)
+kc.rbox(0.02, KIT_Y0 + 0.58, 0.88, 0.62, LIV_S_W - 0.08, 0.92, M["tile"], r=0.004, seg=1)
+# sink on west-wall counter (stainless basin + tap)
+kc.rbox(0.06, LIV_S_W - 0.55, 0.88, 0.57, LIV_S_W - 0.12, 0.92, M["steel"], r=0.03, seg=3)
+kc.cyl(0.32, LIV_S_W - 0.33, 0.92, 0.012, 0.22, M["steel"], seg=8)
+kc.finish()
+# wooden step ladder (A-frame, 2 steps) — in the corner by the arch
+sl = Piece("NewMap_Step_Ladder", solid=True, bevel=0.004)
+# two legs each side
+for (x, y0, y1) in ((0.75, KIT_Y0 + 0.70, KIT_Y0 + 0.72), (1.10, KIT_Y0 + 0.70, KIT_Y0 + 0.72)):
+    sl.rbox(x - 0.015, y0, 0.0, x + 0.015, y1, 0.72, M["wood_lt"], r=0.005)
+sl.rbox(0.73, KIT_Y0 + 0.70, 0.30, 1.12, KIT_Y0 + 0.72, 0.33, M["wood_lt"], r=0.004)   # step 1
+sl.rbox(0.73, KIT_Y0 + 0.70, 0.60, 1.12, KIT_Y0 + 0.72, 0.63, M["wood_lt"], r=0.004)   # step 2
+sl.rbox(0.73, KIT_Y0 + 0.70, 0.70, 1.12, KIT_Y0 + 0.72, 0.73, M["wood_lt"], r=0.004)   # top
+sl.finish()
 
 # ------------------------------------------------------------------ storage cupboard
 sh = Piece("NewMap_Cupboard_Shelves", solid=True, bevel=0.004)
